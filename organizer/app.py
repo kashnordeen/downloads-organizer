@@ -2,14 +2,14 @@ import sys
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile, QTimer, QFileSystemWatcher
-from PySide6.QtWidgets import (QApplication, QFileDialog, QHeaderView, QCheckBox,
-    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QSystemTrayIcon, QMenu, QStyle)
+from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QMessageBox,
+    QTableWidgetItem, QSystemTrayIcon, QMenu)
 
 from .core import Rule, defaults, load_settings, load_options, preview, save_settings
 from .moves import Journal
 from .worker import MonitorWorker
 from .startup import set_startup, startup_enabled
+from .ui import build_ui
 
 
 class MoveWorker(QThread):
@@ -42,7 +42,6 @@ class Window(QMainWindow):
     def __init__(self, data_dir=None):
         super().__init__()
         self.setWindowTitle("Downloads Organizer")
-        self.resize(1100, 850)
         self.data_dir = Path(data_dir or QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
         self.settings_path = self.data_dir / "settings.json"
         self.folder = None
@@ -52,72 +51,8 @@ class Window(QMainWindow):
         self.quitting = False
         self.watcher = QFileSystemWatcher(self)
         self.watcher.directoryChanged.connect(self.wake_monitor)
-        body = QWidget()
-        self.setCentralWidget(body)
-        layout = QVBoxLayout(body)
-        title = QLabel("Downloads Organizer")
-        title.setStyleSheet("font-size: 26px; font-weight: 600; padding: 12px 0;")
-        layout.addWidget(title)
-        layout.addWidget(QLabel("Choose a folder, review your rules, then preview. Files stay local."))
-        bar = QHBoxLayout()
-        self.folder_label = QLabel("No folder selected")
-        bar.addWidget(self.folder_label, 1)
-        choose = QPushButton("Choose folder…")
-        choose.clicked.connect(self.choose_folder)
-        bar.addWidget(choose)
-        layout.addLayout(bar)
-        self.automatic = QCheckBox("Automatically organize using saved rules")
-        layout.addWidget(self.automatic)
-        preferences = QHBoxLayout()
-        self.tray_mode = QCheckBox("Keep running in tray when window closes")
-        self.tray_mode.setEnabled(QSystemTrayIcon.isSystemTrayAvailable())
-        self.tray_mode.setToolTip("If no system tray is available, closing exits safely.")
-        preferences.addWidget(self.tray_mode)
-        self.login_start = QCheckBox("Start at login")
-        self.login_start.setToolTip("Optional per-user startup. Your operating system can disable it.")
-        preferences.addWidget(self.login_start)
-        quit_button = QPushButton("Quit app")
-        quit_button.clicked.connect(self.request_quit)
-        preferences.addWidget(quit_button)
-        layout.addLayout(preferences)
-        self.rules = QTableWidget(0, 5)
-        self.rules.setWordWrap(False)
-        self.rules.setHorizontalHeaderLabels(["Enabled", "Rule", "Extensions (comma separated)", "Filename contains", "Destination folder"])
-        self.rules.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.rules)
-        bar = QHBoxLayout()
-        for label, callback in [("Add rule", lambda: self.add_rule(Rule("New rule", [], "", ""))),
-                                ("Remove selected", self.remove_rule), ("Move up", lambda: self.reorder(-1)),
-                                ("Move down", lambda: self.reorder(1)), ("Browse destination…", self.choose_destination),
-                                ("Save rules", self.save), ("Preview", self.refresh)]:
-            button = QPushButton(label)
-            button.clicked.connect(callback)
-            bar.addWidget(button)
-        layout.addLayout(bar)
-        self.files = QTableWidget(0, 3)
-        self.files.setWordWrap(False)
-        self.files.setHorizontalHeaderLabels(["File", "Destination", "Rule / skipped reason"])
-        self.files.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.files.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.files)
-        self.organize = QPushButton("Organize previewed files")
-        self.organize.setEnabled(False)
-        self.organize.clicked.connect(self.execute)
-        layout.addWidget(self.organize)
-        layout.addWidget(QLabel("History — select a completed move to undo"))
-        self.history_table = QTableWidget(0, 5)
-        self.history_table.setWordWrap(False)
-        self.history_table.setHorizontalHeaderLabels(["ID", "Original", "Destination", "State", "Details"])
-        self.history_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.history_table)
-        self.undo_button = QPushButton("Undo selected move")
-        self.undo_button.clicked.connect(self.undo)
-        layout.addWidget(self.undo_button)
-        self.status = QLabel("Manual mode. Preview never moves files.")
-        self.status.setWordWrap(True)
-        layout.addWidget(self.status)
-        self.tray = QSystemTrayIcon(self.style().standardIcon(QStyle.SP_DirIcon), self)
+        build_ui(self)
+        self.tray = QSystemTrayIcon(self.windowIcon(), self)
         self.tray.setToolTip("Downloads Organizer")
         menu = QMenu(self)
         menu.addAction("Show organizer", self.show_window)
@@ -140,9 +75,7 @@ class Window(QMainWindow):
         self.rules.itemChanged.connect(self.invalidate)
         self.load_history(recover=True)
         self.automatic.toggled.connect(self.toggle_automatic)
-        self.automatic.toggled.connect(lambda checked: self.pause_action.setText(
-            "Pause automatic sorting" if checked else "Resume automatic sorting"))
-        self.pause_action.setText("Pause automatic sorting" if self.automatic.isChecked() else "Resume automatic sorting")
+        self.automatic.toggled.connect(self.update_ui)
         self.tray_mode.toggled.connect(self.save)
         try:
             self.login_start.setChecked(startup_enabled())
@@ -150,8 +83,30 @@ class Window(QMainWindow):
             self.login_start.setEnabled(False)
             self.status.setText(f"Login startup unavailable: {error}")
         self.login_start.toggled.connect(self.toggle_login)
+        self.update_ui()
         if self.automatic.isChecked():
             QTimer.singleShot(0, lambda: self.toggle_automatic(True))
+
+    def show_page(self, index):
+        titles = ["Preview your downloads", "Organization rules", "Move history", "Settings"]
+        descriptions = ["Review where each file will go before you organize it.",
+                        "Rules run from top to bottom. The first enabled match wins. Double-click a field to edit.",
+                        "Select a completed move to undo. Changed files and occupied paths are protected.",
+                        "Control how the organizer runs on this device."]
+        self.pages.setCurrentIndex(index)
+        self.navigation.button(index).setChecked(True)
+        self.page_title.setText(titles[index])
+        self.page_description.setText(descriptions[index])
+
+    def update_ui(self):
+        automatic = self.automatic.isChecked()
+        self.mode_label.setText("Automatic mode" if automatic else "Manual mode")
+        if hasattr(self, "pause_action"):
+            self.pause_action.setText("Pause automatic sorting" if automatic else "Resume automatic sorting")
+        self.files.setVisible(self.files.rowCount() > 0)
+        self.preview_empty.setVisible(self.files.rowCount() == 0)
+        self.history_table.setVisible(self.history_table.rowCount() > 0)
+        self.history_empty.setVisible(self.history_table.rowCount() == 0)
 
     def show_window(self):
         self.showNormal()
@@ -209,6 +164,7 @@ class Window(QMainWindow):
             self.automatic.setChecked(False)
             self.automatic.blockSignals(False)
             self.status.setText(str(error))
+        self.update_ui()
 
     def monitor_finished(self):
         if self.quitting:
@@ -241,6 +197,7 @@ class Window(QMainWindow):
         except Exception as error:
             self.organize.setEnabled(False)
             self.status.setText(f"History unavailable: {error}")
+        self.update_ui()
 
     def undo(self):
         row = self.history_table.currentRow()
@@ -262,9 +219,13 @@ class Window(QMainWindow):
 
     def invalidate(self):
         self.proposals = []
+        self.files.setRowCount(0)
+        self.preview_summary.setText("Refresh to review current files")
+        self.preview_empty.setText("Preview needs a refresh\n\nRefresh the preview to review your files and current rules.")
         self.organize.setEnabled(False)
         if self.automatic.isChecked():
             self.automatic.setChecked(False)
+        self.update_ui()
 
     def execute(self):
         proposals = [p for p in self.proposals if p.destination is not None]
@@ -334,12 +295,16 @@ class Window(QMainWindow):
             self.automatic.setChecked(False)
         self.folder = Path(folder)
         self.folder_label.setText(str(folder))
+        self.folder_label.setToolTip(str(folder))
         self.rules.setRowCount(0)
         for rule in rules if rules is not None else defaults(folder):
             self.add_rule(rule)
         self.files.setRowCount(0)
         self.proposals = []
         self.organize.setEnabled(False)
+        self.preview_summary.setText("Preview before moving files")
+        self.preview_empty.setText("Ready when you are\n\nReview Rules, then refresh the preview.\nPreviewing never moves your files.")
+        self.update_ui()
 
     def choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Choose folder to organize")
@@ -363,6 +328,7 @@ class Window(QMainWindow):
         row = self.rules.currentRow()
         other = row + direction
         if row >= 0 and 0 <= other < self.rules.rowCount():
+            self.invalidate()  # Pause before temporarily removing table items.
             for column in range(5):
                 first, second = self.rules.takeItem(row, column), self.rules.takeItem(other, column)
                 self.rules.setItem(row, column, second)
@@ -389,6 +355,8 @@ class Window(QMainWindow):
                     item.setToolTip(str(proposal.destination) if col == 1 and proposal.destination else text)
                     self.files.setItem(row, col, item)
             count = sum(p.destination is not None for p in self.proposals)
+            self.preview_summary.setText(f"{count} ready to organize · {len(self.proposals) - count} skipped")
+            self.preview_empty.setText("All clear\n\nNo files to review in the watched folder.")
             self.status.setText(f"{count} files match your rules. No files were moved.")
             self.organize.setEnabled(count > 0 and not self.automatic.isChecked()
                                      and not (self.monitor and self.monitor.isRunning()))
@@ -397,6 +365,9 @@ class Window(QMainWindow):
             self.files.setRowCount(0)
             self.organize.setEnabled(False)
             self.status.setText(str(error))
+            self.preview_summary.setText("Preview unavailable")
+            self.preview_empty.setText("Preview unavailable\n\n" + str(error))
+        self.update_ui()
 
 
 def main():

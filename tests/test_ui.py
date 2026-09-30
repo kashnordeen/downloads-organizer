@@ -14,6 +14,32 @@ APP = QApplication.instance() or QApplication([])
 
 
 class DesktopFlowTest(unittest.TestCase):
+    def setUp(self):
+        # Keep UI checks independent of this PC's real startup registration.
+        startup = patch("organizer.app.startup_enabled", return_value=False)
+        startup.start()
+        self.addCleanup(startup.stop)
+
+    def test_workspace_navigation_preserves_preview_and_icon(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.pdf").write_bytes(b"data")
+            window = Window(root / "data")
+            window.set_folder(root)
+            window.refresh()
+            proposals = list(window.proposals)
+            self.assertFalse(window.windowIcon().isNull())
+            self.assertFalse(window.tray.icon().isNull())
+            for index in [1, 2, 3, 0]:
+                window.navigation.button(index).click()
+                self.assertEqual(window.pages.currentIndex(), index)
+                self.assertEqual(window.proposals, proposals)
+                self.assertTrue(window.organize.isEnabled())
+            window.rules.item(0, 1).setText("Changed rule")
+            self.assertFalse(window.organize.isEnabled())
+            self.assertEqual(window.files.rowCount(), 0)
+            window.close()
+
     def test_tray_close_show_and_quit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -77,6 +103,10 @@ class DesktopFlowTest(unittest.TestCase):
             window.set_folder(downloads)
             window.automatic.setChecked(True)
             self.wait_until(lambda: window.monitor.pending.backlog is not None)
+            for index in [1, 2, 3, 0]:
+                window.navigation.button(index).click()
+                self.assertTrue(window.automatic.isChecked())
+                self.assertTrue(window.monitor.isRunning())
             new = ready("new.pdf")
             self.wait_until(lambda: not old.exists() and not new.exists())
             from organizer.moves import Journal
@@ -92,6 +122,11 @@ class DesktopFlowTest(unittest.TestCase):
             self.addCleanup(lambda: self.stop_monitor(restarted))
             self.wait_until(lambda: not offline.exists())
             self.assertTrue(restarted.automatic.isChecked())
+            original_first = restarted.rules.item(0, 1).text()
+            restarted.rules.setCurrentCell(1, 1)
+            restarted.reorder(-1)
+            self.assertFalse(restarted.automatic.isChecked())
+            self.assertEqual(restarted.read_rules()[1].name, original_first)
             self.stop_monitor(restarted)
 
     def stop_monitor(self, window):

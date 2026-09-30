@@ -4,7 +4,7 @@ root = Path(SPECPATH).parent.parent
 analysis = Analysis([str(root / "packaging/entry.py")], pathex=[str(root)],
     hiddenimports=["winrt.windows.applicationmodel", "winrt.windows.foundation"],
     excludes=["PySide6.QtQml", "PySide6.QtQuick", "PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
-    datas=[], binaries=[])
+    datas=[(str(root / "organizer/assets"), "organizer/assets")], binaries=[])
 # Qt uses Windows' system ICU ABI; an unrelated ICU from PATH can break imports.
 analysis.binaries = [entry for entry in analysis.binaries
     if Path(entry[0]).name.lower() not in {"icuuc.dll", "icudt78.dll"}]

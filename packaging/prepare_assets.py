@@ -1,26 +1,21 @@
-"""Generate simple app icons and copy installed runtime license notices."""
+"""Convert the approved icon to package sizes and copy runtime license notices."""
 import importlib.metadata
 import shutil
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QRectF, Qt
-from PySide6.QtGui import QColor, QImage, QPainter
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QImage
 
 root = Path(__file__).resolve().parent.parent
 assets = root / "packaging/windows/Assets"
 assets.mkdir(parents=True, exist_ok=True)
+source = QImage(str(root / "organizer/assets/icon.png"))
+if source.isNull():
+    raise RuntimeError("Approved app icon is missing")
 for name, size in [("StoreLogo.png", 50), ("Square44x44Logo.png", 44),
                    ("Square150x150Logo.png", 150), ("Organizer.ico", 256)]:
-    image = QImage(size, size, QImage.Format_ARGB32)
-    image.fill(QColor("#183b39"))
-    painter = QPainter(image)
-    painter.setRenderHint(QPainter.Antialiasing)
-    painter.setPen(Qt.NoPen)
-    painter.setBrush(QColor("#f1c66a"))
-    painter.drawRoundedRect(QRectF(size * .18, size * .3, size * .35, size * .2), size * .03, size * .03)
-    painter.drawRoundedRect(QRectF(size * .18, size * .4, size * .64, size * .35), size * .04, size * .04)
-    painter.end()
+    image = source.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     if not image.save(str(assets / name)):
         raise RuntimeError(f"Could not save {name}")
 licenses = root / "licenses"

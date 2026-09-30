@@ -28,3 +28,15 @@ Windows Defender antivirus and real-time protection were reported enabled. A cus
 An initial bundle failed because PyInstaller collected another tool's incompatible ICU DLL from PATH. The build now narrows PATH and excludes that external ICU, using Windows' system ICU. The corrected final ZIP passed the runtime checks above.
 
 Remaining gates: trusted publisher identity/signing, actual MSIX installation/activation/login/upgrade/uninstall and data retention, a second native app launch, real reboot, clean-machine/Windows 10 tests, macOS/Linux builds/runtime tests, and complete public redistribution source/Qt attribution review. No actual Downloads files or login startup registration were changed during this checkpoint.
+
+## Blue workspace UI - version 0.1.1, 2026-10-01
+
+Replaced the stacked tables with Preview, Rules, History, and Settings pages. Added a shared blue light/dark palette, native keyboard navigation (Alt+1 through Alt+4), readable tables, empty states, selectable folder paths, and the approved generated icon in the sidebar, window, tray, executable, and MSIX assets. No new runtime dependencies were added. Rule reordering now pauses automatic mode before temporarily removing table items, so persistence never reads an incomplete row.
+
+All 26 regression tests passed; the seven desktop tests also passed after the final reordering check was added. Coverage confirms page changes preserve previews and automatic monitoring, while rule changes invalidate previews and pause sorting. Source compilation and Git whitespace checks passed.
+
+Native Qt screenshots were inspected for both themes at 1180×760 and 900×620 logical pixels. Compact layouts keep action controls visible and allow horizontal table scrolling. Native Alt+1 and Tab checks passed. Captures and report are under `../ui-design/`; they show isolated demo files. Real Downloads and login startup registration were not modified.
+
+The new portable ZIP was extracted to a separate directory with spaces and Unicode. Its executable, with Python environment variables cleared and PATH limited to Windows, passed native window, all-page navigation, icon loading, preview, move, undo, tray close/show/quit, configuration locking, automatic worker, stopped-period catch-up, frozen startup command, and WinRT import checks. Report: `../windows-blue-bundle-check.json`; screenshot: `../windows-blue-bundle-check.png`.
+
+MakeAppx validation/packing succeeded for MSIX identity version 0.1.1.0. ZIP/MSIX integrity checks passed, including the bundled blue artwork, checkbox assets, package logos, and disabled startup default. Checksums are in `../windows-release-blue/SHA256SUMS.txt`. A Defender custom scan of the new release found no threats (`../windows-blue-defender-check.txt`). The executable/MSIX remain unsigned; the trusted-install and other platform verification gates above still apply.

@@ -27,9 +27,9 @@ try {
         [xml]$manifest = Get-Content -LiteralPath (Join-Path $PSScriptRoot 'AppxManifest.xml') -Raw
         $manifest.Package.Identity.Publisher = $Publisher
         $manifest.Save((Join-Path $stage 'AppxManifest.xml'))
-        & $MakeAppx pack /d $stage /p (Join-Path $outputRoot 'DownloadsOrganizer-0.1.0-x64-unsigned.msix') /o *> (Join-Path $projectRoot 'build\makeappx.log')
+        & $MakeAppx pack /d $stage /p (Join-Path $outputRoot 'DownloadsOrganizer-0.1.1-x64-unsigned.msix') /o *> (Join-Path $projectRoot 'build\makeappx.log')
         if ($LASTEXITCODE -ne 0) { throw 'MSIX validation/packing failed' }
         Get-Content -LiteralPath (Join-Path $projectRoot 'build\makeappx.log') -Tail 3
     }
-    Compress-Archive -LiteralPath $bundle -DestinationPath (Join-Path $outputRoot 'DownloadsOrganizer-0.1.0-windows-x64.zip') -Force
+    Compress-Archive -LiteralPath $bundle -DestinationPath (Join-Path $outputRoot 'DownloadsOrganizer-0.1.1-windows-x64.zip') -Force
 } finally { $env:PATH = $buildPath; Pop-Location }

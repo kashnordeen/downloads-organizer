@@ -5,13 +5,13 @@
  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
  IgnorableNamespaces="uap uap10 desktop rescap">
-  <Identity Name="LocalOrganizer.DownloadsOrganizer" Publisher="CN=LocalOrganizer" Version="0.1.0.0" ProcessorArchitecture="x64"/>
+  <Identity Name="LocalOrganizer.DownloadsOrganizer" Publisher="CN=LocalOrganizer" Version="0.1.1.0" ProcessorArchitecture="x64"/>
   <Properties><DisplayName>Downloads Organizer</DisplayName><PublisherDisplayName>Local Organizer</PublisherDisplayName><Logo>Assets\StoreLogo.png</Logo></Properties>
   <Resources><Resource Language="en-us"/></Resources>
   <Dependencies><TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0"/></Dependencies>
   <Applications>
     <Application Id="Organizer" Executable="DownloadsOrganizer.exe" EntryPoint="Windows.FullTrustApplication">
-      <uap:VisualElements DisplayName="Downloads Organizer" Description="Local downloads organizer" BackgroundColor="#183b39" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png"/>
+      <uap:VisualElements DisplayName="Downloads Organizer" Description="Local downloads organizer" BackgroundColor="#2457d6" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png"/>
       <Extensions>
         <desktop:Extension Category="windows.startupTask" Executable="DownloadsOrganizer.exe" EntryPoint="Windows.FullTrustApplication" uap10:Parameters="--background">
           <desktop:StartupTask TaskId="DownloadsOrganizerStartup" Enabled="false" DisplayName="Downloads Organizer"/>

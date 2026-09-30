@@ -3,12 +3,12 @@
 Implemented: local rule editing, ordered extension/filename matching, settings, preview, verified moves, numbered duplicates, history, restart reconciliation, undo, automatic startup catch-up, folder monitoring, tray controls, and optional login startup. A Windows x64 runtime bundle and unsigned MSIX are provided. Trusted installer testing still needs a publisher certificate; macOS/Linux binaries are not yet validated.
 
 ## Windows portable build
-Extract `DownloadsOrganizer-0.1.0-windows-x64.zip`, keep the entire `DownloadsOrganizer` folder together, and run `DownloadsOrganizer.exe`. Python is included. Intended minimum: Windows 10 version 2004; runtime verification currently covers this Windows 11 PC. Review rules in manual mode before enabling automatic sorting. The executable is unsigned, so Windows reputation checks may show a warning; no signing or SmartScreen acceptance claim is made.
+Extract `DownloadsOrganizer-0.1.1-windows-x64.zip`, keep the entire `DownloadsOrganizer` folder together, and run `DownloadsOrganizer.exe`. Python is included. Intended minimum: Windows 10 version 2004; runtime verification currently covers this Windows 11 PC. Review rules in manual mode before enabling automatic sorting. The executable is unsigned, so Windows reputation checks may show a warning; no signing or SmartScreen acceptance claim is made.
 
 For a portable upgrade, quit the old app and extract the new version into a separate folder. Settings/history remain in per-user application data. Uncheck Start at login before moving or removing a portable folder; enable it again from the new location. Removing the portable folder does not erase your organized files or settings.
 
 ## MSIX signing and installation
-`DownloadsOrganizer-0.1.0-x64-unsigned.msix` passed MakeAppx packing/manifest validation. It is a packaging artifact, not a trusted installable release. No certificate has been installed and Windows security remains enabled. A release publisher must rebuild with the certificate's exact subject using `-Publisher`, sign the MSIX with SHA-256 using SignTool, verify its signature, then test installation, login startup, upgrade, and uninstall. No private keys or passwords belong in this repository.
+`DownloadsOrganizer-0.1.1-x64-unsigned.msix` is a packaging artifact, not a trusted installable release. No certificate has been installed and Windows security remains enabled. A release publisher must rebuild with the certificate's exact subject using `-Publisher`, sign the MSIX with SHA-256 using SignTool, verify its signature, then test installation, login startup, upgrade, and uninstall. No private keys or passwords belong in this repository.
 
 The MSIX declares a disabled startup task. The app uses Windows StartupTask APIs to request enabling/disabling it and honors Windows user/policy disablement. MSIX startup launches with `--background`. Actual package activation and login startup remain untested until trusted installation is possible. Windows may remove package-managed settings on uninstall; export/back up settings/history before uninstalling if you need to retain them. Upgrade/uninstall data behavior must be verified on the signed package.
 
@@ -45,6 +45,8 @@ On macOS/Linux replace `py` with `python3` and `.venv\Scripts\python.exe` with `
 The current workspace also has a prepared environment at `../../work/organizer-venv`. `Launch preview.cmd` uses that environment without installing anything. It is a development launcher for this workspace, not an installer.
 
 ## Use
+The blue workspace separates **Preview**, **Rules**, **History**, and **Settings**. Switch pages with the sidebar or Alt+1 through Alt+4. It follows the system light/dark appearance. Tables support keyboard selection, resizing columns, horizontal scrolling, and full-path tooltips. The watched folder and automatic sorting control stay visible on every page. Changing pages does not pause sorting or invalidate a preview.
+
 Choose a folder. Default rules place files in category subfolders. Add filename text if desired: when both extension and text filters exist, both must match. Rules run from top to bottom; the first enabled match wins. Select a rule and browse its destination, or edit the absolute path. Save rules, click Preview, then Organize previewed files and confirm. Changed rules invalidate the preview.
 
 History lists completed and interrupted operations. Select a completed move and click Undo. Undo refuses edited destination files and conflicts at the original path. Interrupted operations retain ambiguous copies for review; inspect the original/destination paths before manually resolving them. Hidden `.organizer-*.tmp` recovery files may remain after failures; they are intentionally not automatically deleted.

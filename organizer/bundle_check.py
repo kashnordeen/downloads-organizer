@@ -37,6 +37,10 @@ def verify(report_path):
         window.set_folder(downloads)
         window.refresh()
         assert window.files.rowCount() == 1
+        assert not window.windowIcon().isNull() and not window.tray.icon().isNull()
+        for index in [1, 2, 3, 0]:
+            window.navigation.button(index).click()
+            assert window.pages.currentIndex() == index and window.organize.isEnabled()
         proposals = preview(downloads, window.read_rules())
         with Journal(root / "data/history.db") as journal:
             moved = journal.move(proposals[0])
@@ -89,4 +93,4 @@ def verify(report_path):
             assert StartupTask.get_async and AsyncStatus.STARTED == 0
         report.write_text(json.dumps({"passed": True, "executable": sys.executable,
             "python": sys.version, "tray_available": tray, "packaged": packaged_windows(),
-            "checks": ["native window", "preview", "move", "undo", "tray close/show/quit", "configuration lock", "automatic worker", "stopped-period catch-up", "frozen startup command", "WinRT imports"]}, indent=2), encoding="utf-8")
+            "checks": ["native window", "workspace navigation", "window/tray icon", "preview", "move", "undo", "tray close/show/quit", "configuration lock", "automatic worker", "stopped-period catch-up", "frozen startup command", "WinRT imports"]}, indent=2), encoding="utf-8")
