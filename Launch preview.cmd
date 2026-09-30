@@ -1,8 +1,8 @@
 @echo off
 cd /d "%~dp0"
-if exist "%~dp0..\..\work\organizer-venv\Scripts\pythonw.exe" (
-  start "" "%~dp0..\..\work\organizer-venv\Scripts\pythonw.exe" -m organizer
+if exist "%~dp0.venv\Scripts\pythonw.exe" (
+  start "" "%~dp0.venv\Scripts\pythonw.exe" -m organizer
 ) else (
-  echo The workspace Python environment is missing. See README.md for setup.
+  echo Create the project .venv first. See README.md for setup.
   pause
 )

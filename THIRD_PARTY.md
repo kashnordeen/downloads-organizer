@@ -1,4 +1,6 @@
-# Runtime notices — personal preview
+# Third-party notices
+
+Project code is MIT-licensed. Dependencies retain their separate licenses.
 
 This one-folder bundle dynamically loads unmodified Python and Qt/PySide DLLs. Keep the entire folder and its notices together. Qt DLLs can be replaced by compatible builds; rebuilding the organizer from the supplied source is also supported. This application does not restrict reverse engineering needed to debug changes to LGPL libraries.
 
@@ -10,6 +12,6 @@ This one-folder bundle dynamically loads unmodified Python and Qt/PySide DLLs. K
 | typing_extensions | 4.16.0 | PSF; https://github.com/python/typing_extensions |
 | PyInstaller bootloader | 6.22.3 | GPL v2 with bootloader distribution exception; https://github.com/pyinstaller/pyinstaller/tree/v6.22.3 |
 
-License copies are in `licenses/`. Qt wheels include a commercial-license reference as an alternative; this preview uses the open-source LGPL option stated in the package metadata. LGPL v3 and GPL v3 texts accompany that option. The bundled Python notices also cover its included libraries, including OpenSSL and SQLite.
+License copies are in `licenses/`. Qt wheels include a commercial-license reference as an alternative; the application uses the open-source LGPL option stated in the package metadata. LGPL v3 and GPL v3 texts accompany that option. The bundled Python notices also cover its included libraries, including OpenSSL and SQLite.
 
-For public redistribution, complete the corresponding-source delivery and full Qt third-party attribution review, retain all runtime notices, and verify the licensing of replacement builds. This local personal preview is not a completed public-release licensing review.
+Before publicly distributing compiled bundles, complete the corresponding-source delivery and full Qt third-party attribution review, retain all runtime notices, and verify the licensing of replacement builds. That binary-release review is not yet complete. Publishing this application's MIT-licensed source does not replace those dependency obligations.

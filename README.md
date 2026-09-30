@@ -1,79 +1,147 @@
-# Downloads Organizer - personal preview
+<div align="center">
 
-Implemented: local rule editing, ordered extension/filename matching, settings, preview, verified moves, numbered duplicates, history, restart reconciliation, undo, automatic startup catch-up, folder monitoring, tray controls, and optional login startup. A Windows x64 runtime bundle and unsigned MSIX are provided. Trusted installer testing still needs a publisher certificate; macOS/Linux binaries are not yet validated.
+<img src="organizer/assets/icon.png" width="88" alt="Downloads Organizer icon">
 
-## Windows portable build
-Extract `DownloadsOrganizer-0.1.1-windows-x64.zip`, keep the entire `DownloadsOrganizer` folder together, and run `DownloadsOrganizer.exe`. Python is included. Intended minimum: Windows 10 version 2004; runtime verification currently covers this Windows 11 PC. Review rules in manual mode before enabling automatic sorting. The executable is unsigned, so Windows reputation checks may show a warning; no signing or SmartScreen acceptance claim is made.
+# Downloads Organizer
 
-For a portable upgrade, quit the old app and extract the new version into a separate folder. Settings/history remain in per-user application data. Uncheck Start at login before moving or removing a portable folder; enable it again from the new location. Removing the portable folder does not erase your organized files or settings.
+**A calmer downloads folder. Every file stays on your device.**
 
-## MSIX signing and installation
-`DownloadsOrganizer-0.1.1-x64-unsigned.msix` is a packaging artifact, not a trusted installable release. No certificate has been installed and Windows security remains enabled. A release publisher must rebuild with the certificate's exact subject using `-Publisher`, sign the MSIX with SHA-256 using SignTool, verify its signature, then test installation, login startup, upgrade, and uninstall. No private keys or passwords belong in this repository.
+Preview file moves, build your own rules, and let a local desktop app handle the routine sorting—with history and safe undo.
 
-The MSIX declares a disabled startup task. The app uses Windows StartupTask APIs to request enabling/disabling it and honors Windows user/policy disablement. MSIX startup launches with `--background`. Actual package activation and login startup remain untested until trusted installation is possible. Windows may remove package-managed settings on uninstall; export/back up settings/history before uninstalling if you need to retain them. Upgrade/uninstall data behavior must be verified on the signed package.
+![Version](https://img.shields.io/badge/version-0.1.1-2457d6?style=flat-square)
+![Python](https://img.shields.io/badge/Python-3.12%E2%80%933.14-3776AB?style=flat-square&logo=python&logoColor=white)
+![Qt](https://img.shields.io/badge/Qt-6.11.2-41CD52?style=flat-square&logo=qt&logoColor=white)
+[![MIT license](https://img.shields.io/badge/license-MIT-2457d6?style=flat-square)](LICENSE)
+![Local](https://img.shields.io/badge/files-stay_local-2457d6?style=flat-square)
 
-Official guidance: [MSIX command-line packaging](https://learn.microsoft.com/en-us/windows/msix/package/manual-packaging-root), [SignTool signing](https://learn.microsoft.com/en-us/windows/msix/package/sign-app-package-using-signtool), [Windows startup tasks](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask).
+[Get started](#get-started) · [How it works](#daily-use) · [Build for Windows](docs/BUILDING.md) · [Validation](VALIDATION.md)
 
-## Rebuild on Windows
-Install source/runtime dependencies and `packaging/build-requirements.txt` in an isolated Python environment. Run `python packaging/prepare_assets.py`, then:
+<img src="docs/media/workspace-tour.gif" width="1000" alt="Animated tour of the real Downloads Organizer: preview demo downloads, edit rules, review move history, and open settings">
+
+*Actual application UI with demonstration files. The tour loops automatically.*
+
+</div>
+
+## Built for everyday downloads
+
+| Capability | What you control |
+| :--- | :--- |
+| **Preview first** | See destinations and skipped reasons before confirming a manual move. |
+| **Rules that make sense** | Match extensions and filename text. The first enabled rule wins. |
+| **Automatic catch-up** | On reopening, ready files downloaded while stopped are processed before later ready arrivals. |
+| **Background sorting** | Keep the app in the system tray; optionally start it at login. |
+| **History and undo** | Review moves and restore unchanged files when the original path is free. |
+| **A focused workspace** | Separate Preview, Rules, History, and Settings pages, with blue light/dark themes. |
+
+No account, cloud service, telemetry, or administrator privileges are required for normal operation.
+
+## Platform status
+
+| Platform | Current status |
+| :--- | :--- |
+| **Windows x64** | Source and portable bundle tested on Windows 11. Intended minimum is Windows 10 version 2004; Windows 10 and clean-machine tests remain pending. |
+| **macOS** | Source support implemented; runtime, login startup, and packaging remain unverified. |
+| **Linux** | Source support implemented; runtime, desktop integration, and packaging remain unverified. Qt display libraries are required. |
+
+Version **0.1.1** is a development preview. Windows executable/MSIX builds are unsigned. Trusted installation and package-managed login startup still require a signing identity and installation testing. This repository contains source and documentation; compiled installers are not published here.
+
+## Get started
+
+Install **Python 3.12–3.14** and Git, then clone the repository.
+
+### Windows
 
 ```powershell
-.\packaging\windows\build.ps1 -Python .venv\Scripts\python.exe -MakeAppx 'C:\path\to\WindowsSDK\x64\makeappx.exe' -Output C:\path\to\release
-```
-
-Omit `-MakeAppx` for a portable-only build. The script bundles with pinned PyInstaller 6.22.3 instead of a compiler-dependent build, embeds `asInvoker`, uses fresh MSIX staging, and excludes incompatible external ICU copies in favor of Windows' ICU. It temporarily narrows the build process PATH to avoid other tools' DLLs. It never installs the package, changes security settings, or signs with a generated certificate. License texts in `licenses/` must remain present; see `THIRD_PARTY.md` for redistribution limits.
-
-To verify a built bundle without touching Downloads or changing startup:
-
-```powershell
-.\DownloadsOrganizer.exe --verify-bundle C:\existing\folder\bundle-check.json
-```
-
-The explicit check uses temporary files under the report directory, writes a report/screenshot, and exits. It checks native UI, preview, move, undo, tray behavior, configuration locking, automatic sorting, catch-up after stopping, frozen startup command, and compiled Windows API imports. A complete clean-machine and signed-install check remains a release gate. See [PyInstaller documentation](https://pyinstaller.org/en/stable/usage.html).
-
-## Run from source
-Requires Python 3.12–3.14. In this project folder:
-
-```powershell
+git clone https://github.com/kashnordeen/downloads-organizer.git
+cd downloads-organizer
 py -m venv .venv
 .venv\Scripts\python.exe -m pip install -e .
 .venv\Scripts\pythonw.exe -m organizer
 ```
 
-On macOS/Linux replace `py` with `python3` and `.venv\Scripts\python.exe` with `.venv/bin/python`; launch with `.venv/bin/python -m organizer`. Those systems have not yet been tested. On Linux the OS must provide Qt's required display libraries.
+<details>
+<summary><strong>macOS / Linux source setup (experimental)</strong></summary>
 
-The current workspace also has a prepared environment at `../../work/organizer-venv`. `Launch preview.cmd` uses that environment without installing anything. It is a development launcher for this workspace, not an installer.
+```bash
+git clone https://github.com/kashnordeen/downloads-organizer.git
+cd downloads-organizer
+python3 -m venv .venv
+.venv/bin/python -m pip install -e .
+.venv/bin/python -m organizer
+```
 
-## Use
-The blue workspace separates **Preview**, **Rules**, **History**, and **Settings**. Switch pages with the sidebar or Alt+1 through Alt+4. It follows the system light/dark appearance. Tables support keyboard selection, resizing columns, horizontal scrolling, and full-path tooltips. The watched folder and automatic sorting control stay visible on every page. Changing pages does not pause sorting or invalidate a preview.
+Use a supported Python version. On Linux, install the display libraries required by your distribution's Qt environment.
 
-Choose a folder. Default rules place files in category subfolders. Add filename text if desired: when both extension and text filters exist, both must match. Rules run from top to bottom; the first enabled match wins. Select a rule and browse its destination, or edit the absolute path. Save rules, click Preview, then Organize previewed files and confirm. Changed rules invalidate the preview.
+</details>
 
-History lists completed and interrupted operations. Select a completed move and click Undo. Undo refuses edited destination files and conflicts at the original path. Interrupted operations retain ambiguous copies for review; inspect the original/destination paths before manually resolving them. Hidden `.organizer-*.tmp` recovery files may remain after failures; they are intentionally not automatically deleted.
+For Windows bundling, unsigned MSIX generation, portable upgrades, and signing requirements, see [the build guide](docs/BUILDING.md).
 
-Settings and SQLite history live in the per-user Qt application data location for `LocalOrganizer/DownloadsOrganizer`. No accounts, network access, telemetry, administrator privileges, or security exclusions are used during normal operation.
+## Daily use
 
-## Background operation
-Check **Automatically organize using saved rules** after reviewing the selected folder and rules. Ready startup files are processed before later downloads; changing/incomplete files wait without blocking other ready files. Folder notifications wake the worker and periodic scans recover missed events. Editing rules or changing the watched folder pauses automatic mode; review and enable it again to resume. Pause before manual moves or undo. Interrupted moves needing review are not retried automatically.
+1. **Choose a folder.** The default rules suggest category subfolders.
+2. **Review Rules.** Edit extension lists, optional filename text, and absolute destinations. Reorder rules to set priority, then save.
+3. **Refresh Preview.** Inspect every proposed destination and skipped reason.
+4. **Organize files.** Confirm the manual move, or enable automatic sorting after reviewing your rules.
+5. **Review History.** Select a completed move to undo when needed.
 
-Check **Keep running in tray when window closes** to keep sorting after closing the window. The tray menu offers Show, Pause/Resume, and Quit. **Quit app** stops after finishing the current file safely. Automatic mode remains saved on Quit, so reopening catches up on files downloaded while stopped. Without a usable system tray, closing exits instead of hiding an unreachable app.
+Switch pages with the sidebar or **Alt+1** through **Alt+4**. Resize table columns or hover over a path to read it in full. Navigation preserves the current preview and automatic monitoring. Editing rules or changing the watched folder pauses sorting and invalidates the preview.
 
-**Start at login** is off by default. The source/portable app uses a Startup `.cmd` on Windows, a LaunchAgent on macOS, and an autostart `.desktop` on Linux. Unchecking removes that registration. Existing identical registrations are not recreated, so OS disablement remains in control. MSIX uses the Windows package startup API instead. `--background` hides the window only when tray mode was enabled and a tray is available; otherwise it shows the window. Moving/deleting a source/portable app invalidates its startup command. Live login boot, macOS, and Linux startup remain unverified.
+### When the window closes
 
-## Safety limits
-Only direct regular files are considered; subfolders, symlinks/junctions, system files, and common unfinished downloads are skipped. Manual moves require unchanged files since preview and an age of at least two seconds. Automatic mode additionally observes stable metadata across scans separated by at least two seconds. These checks cannot prove completion for every downloader, especially paused downloads. Preview manually before organizing important files.
+With **Keep running in the tray** enabled and a usable tray available, closing the window keeps the app running. The tray menu offers Show, Pause/Resume, and Quit. Without a usable tray, closing exits safely.
 
-Moves use a verified temporary copy and atomic no-overwrite hard-link publication within the destination filesystem. Filesystems without hard-link support fail safely and retain the source/recovery copy. Same-volume moves also use copying, so large files need temporary disk space. Changes detected during copying retain the original. A final check and source removal are separate filesystem calls: an external writer can still race that narrow interval; do not organize files actively modified by another program. SHA-256 verification covers content, not arbitrary extended filesystem metadata.
+**Quit app** finishes the current file before stopping. Automatic mode remains saved, so reopening catches up on downloads created during the stopped period. **Start at login** is optional and respects operating-system disablement.
 
-## Verify
-```powershell
+## Safety and privacy
+
+- **Preview never moves files.** Manual moves require confirmation and recheck the source against the preview.
+- **Existing destinations are preserved.** Collisions receive numbered names; files are not overwritten.
+- **Moves are journaled.** A verified temporary copy is published using a no-overwrite hard link. Interrupted, ambiguous operations retain copies for review instead of automatically retrying.
+- **Undo checks first.** Edited destination files and occupied original paths prevent restoration.
+- **Only direct regular files are considered.** Subfolders, symlinks/junctions, system files, and common partial downloads are skipped.
+
+Readiness uses file age and, in automatic mode, stable metadata observed across scans at least two seconds apart. This cannot prove every download is complete. Avoid files actively modified by other programs: an external writer can race the final source check/removal. Copying requires temporary disk space; filesystems without hard-link support fail safely and retain the source/recovery copy. SHA-256 verifies content, not arbitrary extended metadata.
+
+Settings and SQLite history use Qt's per-user application data location under **LocalOrganizer / DownloadsOrganizer**. No file data is sent to a server. Interrupted operations may leave hidden `.organizer-*.tmp` files for manual review.
+
+## Inside the app
+
+```mermaid
+flowchart LR
+    UI[Qt desktop workspace] --> Rules[Ordered rules and preview]
+    Folder[Watched folder] --> Scan[Startup scan and readiness checks]
+    Scan --> Worker[Automatic worker]
+    Rules --> Move[Manual move worker]
+    Worker --> Journal[Verified moves and SQLite journal]
+    Move --> Journal
+    Journal --> Destination[Category folders]
+    UI --> Undo[History and safe undo]
+    Undo --> Journal
+```
+
+| Module | Responsibility |
+| :--- | :--- |
+| [`ui.py`](organizer/ui.py) / [`app.py`](organizer/app.py) | Native layout, theme, navigation, and desktop actions. |
+| [`core.py`](organizer/core.py) | Rules, exclusions, previews, and settings. |
+| [`worker.py`](organizer/worker.py) | Startup backlog priority, readiness tracking, notifications, and rescans. |
+| [`moves.py`](organizer/moves.py) | Verified copying, collision handling, journal recovery, and undo. |
+| [`startup.py`](organizer/startup.py) | Optional per-user startup and Windows packaged startup APIs. |
+
+## Development and verification
+
+Run from an activated project virtual environment:
+
+```bash
 python -m unittest discover -s tests -v
 python -m compileall -q organizer
 ```
 
-Tests use temporary files and an offscreen desktop window, including preview → move → restart → undo. Actual multi-volume hardware and macOS/Linux packaging remain unverified.
+**26 tests** passed in the Windows development environment. They cover rule priority, exclusions, collisions, stale/changed files, recovery, undo, monitoring, stopped-period catch-up, navigation, tray behavior, and startup policy handling. Tests use temporary files and offscreen Qt windows. See [validation details and remaining gates](VALIDATION.md).
 
-## Dependencies
-PySide6 6.11.2 (with matching shiboken6, Essentials, and Addons), and Windows-only PyWinRT 3.2.1, verified on 2026-10-01. Python standard library supplies filesystem operations, JSON, SQLite, and tests. Pinned runtime/build dependency lists and accompanying notices are supplied under `packaging/` and `licenses/`. The personal preview is not a completed public redistribution licensing review.
+Runtime dependencies are pinned in [`pyproject.toml`](pyproject.toml); build pins are in [`packaging/build-requirements.txt`](packaging/build-requirements.txt). Python's standard library supplies filesystem operations, JSON, SQLite, and tests.
 
-Sources: [Qt for Python](https://doc.qt.io/qtforpython-6/), [PySide6 release metadata](https://pypi.org/project/PySide6/), [Microsoft standard-user guidance](https://learn.microsoft.com/en-us/windows/win32/secbp/running-with-administrator-privileges).
+For a bug report, include the OS, Python/app version, reproduction steps, and the displayed error. Use sample files and redact personal paths. Test rule changes against temporary folders before contributing changes that move files.
+
+## License
+
+Project code is licensed under [MIT](LICENSE). Dependency licenses remain separate: Qt/PySide/Shiboken use the LGPL v3 option for the included modules; other runtime/build notices are documented in [THIRD_PARTY.md](THIRD_PARTY.md) and [`licenses/`](licenses/). Complete the corresponding-source and Qt attribution review before distributing compiled bundles publicly.

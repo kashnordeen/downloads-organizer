@@ -1,42 +1,36 @@
-# Checkpoint A validation — 2026-10-01
+# Validation record
 
-Environment: Windows, Python 3.14.7, PySide6 6.11.2 in the workspace-local environment.
+Version **0.1.1**, verified **2026-10-01** on Windows 11 x64. This records local checks; it is not a CI badge or a certification.
 
-13 unittest checks passed. Filesystem checks cover preview/rule priority, exclusions, settings corruption preservation, duplicate filenames, stale source rejection, content changes during copying, publication failure, source-removal failure, interrupted completion recovery, undo conflicts, and edited-destination rejection. Offscreen Qt runtime tests exercise rule editing invalidation and preview → confirmed move → application restart → undo via desktop buttons.
+## Environment
 
-Compileall passed. Git whitespace check passed. The app was rendered and visually inspected; `../organizer-preview.png` shows demonstration files only. The real Downloads folder was not selected or mutated during development.
+| Component | Verified version |
+| :--- | :--- |
+| Python | 3.14.7 |
+| PySide6 / Qt | 6.11.2 |
+| PyWinRT | 3.2.1 |
+| PyInstaller / hooks | 6.22.3 / 2026.8 |
+| Microsoft SDK build tools | 10.0.28000.2705 |
 
-This is a source development preview, not an installer. Automatic catch-up, tray operation, login startup, release signing, and packaging remain pending. Real cross-volume hardware, arbitrary external-writer races, OS crash/disk failure behavior, macOS, and Linux remain unverified. Unsupported destination hard-link filesystems fail safely. See README for readiness and metadata limitations.
+## Completed checks
 
-## Checkpoint B — 2026-10-01
-Added automatic catch-up and monitoring, persisted automatic/tray options, tray Show/Pause/Resume/Quit, single-instance exclusion, and opt-in source startup registration.
+- **26 tests passed:** rules and settings, exclusions, collision preservation, stale source rejection, source changes during copying, publication/source-removal failures, interrupted completion recovery, undo conflicts, and edited-destination rejection.
+- **Desktop flow:** preview → confirmed move → restart → undo; automatic startup backlog priority, changing-file fairness, stopped-period catch-up, tray behavior, and startup policy handling.
+- **Workspace:** navigation preserves valid previews and active monitoring; rule edits invalidate previews; reordering pauses automatic sorting before changing table items.
+- **Native UI:** light/dark screenshots inspected at 1180×760 and 900×620 logical pixels; action controls stay accessible with table scrolling. Alt+1 and Tab checks passed.
+- **Portable runtime:** ZIP extracted into a separate path containing spaces and Unicode. With Python environment variables cleared and PATH limited to Windows, the bundled executable passed UI, navigation, icon, preview, move, undo, tray, lock, worker, catch-up, startup-command, and WinRT import checks.
+- **Packaging:** embedded `asInvoker` manifest inspected; MakeAppx validation/packing succeeded for identity version 0.1.1.0; ZIP/MSIX archive integrity and bundled artwork were checked. Packaged startup is disabled by default.
+- **Security checks:** a Defender custom scan of the generated release found no threats. The pinned runtime audit found no known vulnerabilities at the verification date. These are point-in-time checks, not exhaustive security guarantees or SmartScreen reputation claims.
+- **Source hygiene:** compilation and Git whitespace checks passed.
 
-23 tests cover startup backlog priority/deduplication, changing backlog fairness, re-observation after disappearance, stale sources, no retry of unresolved moves, source scan races, registration content/idempotence/removal in temporary locations, startup error reversal, no-tray fallback, lock exclusion, and desktop catch-up across a stopped period. Existing preview/move/recovery/undo checks remain passing.
+The [README tour](docs/media/workspace-tour.gif) uses demonstration files. Validation used isolated temporary files and mocked or temporary startup registrations. Real Downloads and login startup registration were not changed by those checks.
 
-A native Windows Qt runtime probe confirmed system tray availability and exercised actual hide-to-tray, show, and quit. It rendered the updated `../organizer-preview.png` with demo files. Actual Windows startup registration was not changed; startup generation and disabling were tested in temporary directories. A real login/reboot and simultaneous second GUI launch remain unverified; locking was tested with competing QLockFile instances. Packaging/signing, macOS/Linux runtime, and release security testing remain pending.
+## Remaining verification
 
-## Checkpoint C — Windows packaging preview, 2026-10-01
+- The executable and MSIX are **unsigned**. Trusted publisher identity, installation, package activation, login startup, upgrade/uninstall, and package data retention remain untested.
+- A separate clean PC, Windows 10, a real reboot, and a second native app launch remain untested. Competing QLockFile instances were checked.
+- macOS/Linux runtime, native startup, and binary packaging remain unverified.
+- Real multi-volume hardware, OS crash/disk failure, extended metadata preservation, and arbitrary external-writer races remain outside current validation.
+- Complete the Qt corresponding-source and third-party attribution review before distributing compiled bundles publicly.
 
-25 unittest checks pass, including package startup routing and refusal to override user/policy disablement. Those package-policy cases use projected API mocks, not a signed installation. Compile and whitespace checks pass.
-
-Built with Python 3.14.7, PySide6 6.11.2, PyWinRT 3.2.1, PyInstaller 6.22.3 / hooks 2026.8, and Microsoft SDK build tools 10.0.28000.2705. The final ZIP was extracted into a different workspace folder containing spaces and Unicode. With PATH limited to Windows and PYTHONHOME/PYTHONPATH cleared, the bundled executable passed native window, preview, verified move, undo, tray close/show/quit, configuration lock, automatic worker, stopped-period catch-up, frozen startup command, and WinRT import checks. No separately launched Python interpreter was used. Report/screenshot: `../windows-bundle-check.json` and `.png`. A separate clean PC without Python remains untested.
-
-The embedded executable manifest was inspected and requests `asInvoker`, with no UIAccess. MakeAppx created the MSIX with validation enabled; archive integrity was checked. Package startup is disabled by default and passes `--background`; package identity Publisher is a placeholder (`CN=LocalOrganizer`) that must match a future signing certificate. AppxSignature.p7x is absent: the MSIX and executable are unsigned. SignTool cannot validate the unsigned MSIX; no trusted install/release claim is made.
-
-Windows Defender antivirus and real-time protection were reported enabled. A custom Defender scan of the generated release found no threats. No security settings or certificate trust were changed. The pinned runtime dependency audit found no known vulnerabilities; `../runtime-audit.json` records all eight checked distributions. These checks do not predict future SmartScreen reputation or establish exhaustive security.
-
-An initial bundle failed because PyInstaller collected another tool's incompatible ICU DLL from PATH. The build now narrows PATH and excludes that external ICU, using Windows' system ICU. The corrected final ZIP passed the runtime checks above.
-
-Remaining gates: trusted publisher identity/signing, actual MSIX installation/activation/login/upgrade/uninstall and data retention, a second native app launch, real reboot, clean-machine/Windows 10 tests, macOS/Linux builds/runtime tests, and complete public redistribution source/Qt attribution review. No actual Downloads files or login startup registration were changed during this checkpoint.
-
-## Blue workspace UI - version 0.1.1, 2026-10-01
-
-Replaced the stacked tables with Preview, Rules, History, and Settings pages. Added a shared blue light/dark palette, native keyboard navigation (Alt+1 through Alt+4), readable tables, empty states, selectable folder paths, and the approved generated icon in the sidebar, window, tray, executable, and MSIX assets. No new runtime dependencies were added. Rule reordering now pauses automatic mode before temporarily removing table items, so persistence never reads an incomplete row.
-
-All 26 regression tests passed; the seven desktop tests also passed after the final reordering check was added. Coverage confirms page changes preserve previews and automatic monitoring, while rule changes invalidate previews and pause sorting. Source compilation and Git whitespace checks passed.
-
-Native Qt screenshots were inspected for both themes at 1180×760 and 900×620 logical pixels. Compact layouts keep action controls visible and allow horizontal table scrolling. Native Alt+1 and Tab checks passed. Captures and report are under `../ui-design/`; they show isolated demo files. Real Downloads and login startup registration were not modified.
-
-The new portable ZIP was extracted to a separate directory with spaces and Unicode. Its executable, with Python environment variables cleared and PATH limited to Windows, passed native window, all-page navigation, icon loading, preview, move, undo, tray close/show/quit, configuration locking, automatic worker, stopped-period catch-up, frozen startup command, and WinRT import checks. Report: `../windows-blue-bundle-check.json`; screenshot: `../windows-blue-bundle-check.png`.
-
-MakeAppx validation/packing succeeded for MSIX identity version 0.1.1.0. ZIP/MSIX integrity checks passed, including the bundled blue artwork, checkbox assets, package logos, and disabled startup default. Checksums are in `../windows-release-blue/SHA256SUMS.txt`. A Defender custom scan of the new release found no threats (`../windows-blue-defender-check.txt`). The executable/MSIX remain unsigned; the trusted-install and other platform verification gates above still apply.
+An early Windows build collected an unrelated incompatible ICU DLL from another tool. The build now narrows PATH and excludes that copy, using Windows' system ICU; the corrected runtime passed the checks above.
