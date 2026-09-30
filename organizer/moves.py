@@ -7,7 +7,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from .core import safe_path, signature
+from .core import Proposal, safe_path, signature
 
 
 def digest(path):
@@ -64,8 +64,8 @@ class Journal:
             safe_path(destination.parent)
             fd, name = tempfile.mkstemp(prefix=".organizer-", suffix=".tmp", dir=destination.parent)
             temp = Path(name)
-            self.update(operation, temp=str(temp))
             with os.fdopen(fd, "wb") as target, source.open("rb") as origin:
+                self.update(operation, temp=str(temp))
                 shutil.copyfileobj(origin, target, 1024 * 1024)
                 target.flush()
                 os.fsync(target.fileno())
@@ -82,6 +82,8 @@ class Journal:
                     os.link(temp, candidate)
                     break
                 except FileExistsError:
+                    if undo_of is not None:
+                        raise ValueError("Original path is occupied; undo cancelled")
                     number += 1
             self.update(operation, state="published", signature=json.dumps(signature(candidate)))
             if signature(source) != proposal.signature or digest(source) != expected:
@@ -89,10 +91,40 @@ class Journal:
             # ponytail: readiness is heuristic; downloader-specific completion signals if needed.
             source.unlink()
             temp.unlink()
-            self.update(operation, state="complete", temp="")
+            self.update(operation, state="complete", temp="", signature=json.dumps(signature(candidate)))
             if undo_of is not None:
                 self.update(undo_of, state="undone")
             return candidate
         except Exception as error:
             self.update(operation, state="review", error=str(error))
             raise
+
+    def undo(self, operation):
+        row = self.db.execute("SELECT source,destination,state,hash,signature,undo_of FROM operations WHERE id=?",
+                              (operation,)).fetchone()
+        if not row or row[2] != "complete" or row[5] is not None:
+            raise ValueError("Select a completed move to undo")
+        source, destination = Path(row[0]), Path(row[1])
+        if source.exists() or source.is_symlink():
+            raise ValueError("Original path is occupied; undo cancelled")
+        safe_path(destination)
+        if not destination.is_file() or tuple(json.loads(row[4])) != signature(destination) or digest(destination) != row[3]:
+            raise ValueError("Destination changed or is missing; undo cancelled")
+        return self.move(Proposal(destination, source, "Undo", signature(destination)), undo_of=operation)
+
+    def recover(self):
+        rows = self.db.execute("""SELECT id,source,destination,hash,signature,temp,undo_of
+            FROM operations WHERE state IN ('pending','published','review')""").fetchall()
+        for operation, source, destination, expected, saved, temp, undo_of in rows:
+            try:
+                original, target = Path(source), Path(destination)
+                safe_path(target)
+                if (not original.exists() and not original.is_symlink() and target.is_file()
+                        and signature(target)[:4] == tuple(json.loads(saved))[:4] and digest(target) == expected):
+                    self.update(operation, state="complete", error="")
+                    if undo_of is not None:
+                        self.update(undo_of, state="undone")
+                else:
+                    self.update(operation, state="review", error="Interrupted operation: files retained; inspect paths before acting")
+            except (OSError, ValueError, TypeError) as error:
+                self.update(operation, state="review", error=str(error))

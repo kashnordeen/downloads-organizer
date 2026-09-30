@@ -1,9 +1,9 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal
-from PySide6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QHeaderView,
-    QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton,
+from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHeaderView,
+    QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from .core import Rule, defaults, load_settings, preview, save_settings
@@ -18,22 +18,29 @@ class MoveWorker(QThread):
         self.data_dir, self.proposals = data_dir, proposals
 
     def run(self):
-        with Journal(self.data_dir / "history.db") as journal:
-            for proposal in self.proposals:
-                if self.isInterruptionRequested():
-                    break
-                try:
-                    destination = journal.move(proposal)
-                    self.report.emit(f"Moved {proposal.source.name} → {destination}")
-                except (OSError, ValueError) as error:
-                    self.report.emit(f"Skipped {proposal.source.name}: {error}")
+        try:
+            with Journal(self.data_dir / "history.db") as journal:
+                if isinstance(self.proposals, int):
+                    restored = journal.undo(self.proposals)
+                    self.report.emit(f"Restored {restored}")
+                    return
+                for proposal in self.proposals:
+                    if self.isInterruptionRequested():
+                        break
+                    try:
+                        destination = journal.move(proposal)
+                        self.report.emit(f"Moved {proposal.source.name} → {destination}")
+                    except (OSError, ValueError) as error:
+                        self.report.emit(f"Skipped {proposal.source.name}: {error}")
+        except Exception as error:
+            self.report.emit(f"Operation stopped safely: {error}")
 
 
 class Window(QMainWindow):
     def __init__(self, data_dir=None):
         super().__init__()
-        self.setWindowTitle("Downloads Organizer — Preview")
-        self.resize(1050, 700)
+        self.setWindowTitle("Downloads Organizer")
+        self.resize(1100, 850)
         self.data_dir = Path(data_dir or QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
         self.settings_path = self.data_dir / "settings.json"
         self.folder = None
@@ -54,6 +61,7 @@ class Window(QMainWindow):
         bar.addWidget(choose)
         layout.addLayout(bar)
         self.rules = QTableWidget(0, 5)
+        self.rules.setWordWrap(False)
         self.rules.setHorizontalHeaderLabels(["Enabled", "Rule", "Extensions (comma separated)", "Filename contains", "Destination folder"])
         self.rules.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.rules)
@@ -67,6 +75,7 @@ class Window(QMainWindow):
             bar.addWidget(button)
         layout.addLayout(bar)
         self.files = QTableWidget(0, 3)
+        self.files.setWordWrap(False)
         self.files.setHorizontalHeaderLabels(["File", "Destination", "Rule / skipped reason"])
         self.files.setEditTriggers(QTableWidget.NoEditTriggers)
         self.files.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
@@ -75,6 +84,16 @@ class Window(QMainWindow):
         self.organize.setEnabled(False)
         self.organize.clicked.connect(self.execute)
         layout.addWidget(self.organize)
+        layout.addWidget(QLabel("History — select a completed move to undo"))
+        self.history_table = QTableWidget(0, 5)
+        self.history_table.setWordWrap(False)
+        self.history_table.setHorizontalHeaderLabels(["ID", "Original", "Destination", "State", "Details"])
+        self.history_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        layout.addWidget(self.history_table)
+        self.undo_button = QPushButton("Undo selected move")
+        self.undo_button.clicked.connect(self.undo)
+        layout.addWidget(self.undo_button)
         self.status = QLabel("Manual mode. Preview never moves files.")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -85,6 +104,40 @@ class Window(QMainWindow):
             except ValueError as error:
                 self.status.setText(str(error) + " Original settings were preserved.")
         self.rules.itemChanged.connect(self.invalidate)
+        self.load_history(recover=True)
+
+    def load_history(self, recover=False):
+        try:
+            with Journal(self.data_dir / "history.db") as journal:
+                if recover:
+                    journal.recover()
+                history = journal.history()
+            self.history_table.setRowCount(len(history))
+            for row, operation in enumerate(history):
+                for col, value in enumerate(operation):
+                    item = QTableWidgetItem(str(value or ""))
+                    item.setToolTip(str(value or ""))
+                    self.history_table.setItem(row, col, item)
+            if recover and any(row[3] == "review" for row in history):
+                self.status.setText("Some interrupted moves need review. Copies have been retained; inspect History.")
+        except Exception as error:
+            self.organize.setEnabled(False)
+            self.status.setText(f"History unavailable: {error}")
+
+    def undo(self):
+        row = self.history_table.currentRow()
+        if row < 0:
+            self.status.setText("Select a completed move in History first.")
+            return
+        operation = int(self.history_table.item(row, 0).text())
+        self.start_worker(operation)
+
+    def start_worker(self, work):
+        self.setEnabled(False)
+        self.worker = MoveWorker(self.data_dir, work, self)
+        self.worker.report.connect(self.status.setText)
+        self.worker.finished.connect(self.finished)
+        self.worker.start()
 
     def invalidate(self):
         self.proposals = []
@@ -97,15 +150,12 @@ class Window(QMainWindow):
         answer = QMessageBox.question(self, "Organize files", f"Move {len(proposals)} previewed files?\nExisting files will never be overwritten.")
         if answer != QMessageBox.Yes:
             return
-        self.setEnabled(False)
-        self.worker = MoveWorker(self.data_dir, proposals, self)
-        self.worker.report.connect(self.status.setText)
-        self.worker.finished.connect(self.finished)
-        self.worker.start()
+        self.start_worker(proposals)
 
     def finished(self):
         self.setEnabled(True)
         self.invalidate()
+        self.load_history()
 
     def closeEvent(self, event):
         if self.worker is not None and self.worker.isRunning():
@@ -123,7 +173,9 @@ class Window(QMainWindow):
         enabled.setCheckState(Qt.Checked if rule.enabled else Qt.Unchecked)
         self.rules.setItem(row, 0, enabled)
         for column, value in enumerate([rule.name, ", ".join(rule.extensions), rule.contains, rule.destination], 1):
-            self.rules.setItem(row, column, QTableWidgetItem(value))
+            item = QTableWidgetItem(value)
+            item.setToolTip(value)
+            self.rules.setItem(row, column, item)
 
     def read_rules(self):
         if self.folder is None:
@@ -186,8 +238,13 @@ class Window(QMainWindow):
             self.proposals = preview(self.folder, self.read_rules())
             self.files.setRowCount(len(self.proposals))
             for row, proposal in enumerate(self.proposals):
-                for col, text in enumerate([proposal.source.name, str(proposal.destination or "—"), proposal.reason]):
-                    self.files.setItem(row, col, QTableWidgetItem(text))
+                destination = str(proposal.destination or "—")
+                if proposal.destination is not None and proposal.destination.is_relative_to(self.folder):
+                    destination = str(proposal.destination.relative_to(self.folder))
+                for col, text in enumerate([proposal.source.name, destination, proposal.reason]):
+                    item = QTableWidgetItem(text)
+                    item.setToolTip(str(proposal.destination) if col == 1 and proposal.destination else text)
+                    self.files.setItem(row, col, item)
             count = sum(p.destination is not None for p in self.proposals)
             self.status.setText(f"{count} files match your rules. No files were moved.")
             self.organize.setEnabled(count > 0)
@@ -202,6 +259,12 @@ def main():
     app = QApplication(sys.argv)
     app.setOrganizationName("LocalOrganizer")
     app.setApplicationName("DownloadsOrganizer")
-    window = Window()
+    data_dir = Path(QStandardPaths.writableLocation(QStandardPaths.AppDataLocation))
+    data_dir.mkdir(parents=True, exist_ok=True)
+    lock = QLockFile(str(data_dir / "organizer.lock"))
+    if not lock.tryLock(0):
+        QMessageBox.information(None, "Already running", "Downloads Organizer is already running.")
+        return
+    window = Window(data_dir)
     window.show()
     sys.exit(app.exec())

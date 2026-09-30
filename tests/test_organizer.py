@@ -2,6 +2,7 @@ import json
 import tempfile
 import os
 import time
+from unittest.mock import patch
 import unittest
 from pathlib import Path
 
@@ -77,6 +78,86 @@ class OrganizerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 journal.move(proposal)
             self.assertEqual(proposal.source.read_bytes(), b"changed")
+
+    def test_undo_and_conflicting_original(self):
+        proposal = self.ready_proposal()
+        with Journal(self.root / "history.db") as journal:
+            destination = journal.move(proposal)
+            proposal.source.write_bytes(b"new original")
+            with self.assertRaises(ValueError):
+                journal.undo(1)
+            proposal.source.unlink()
+            journal.undo(1)
+            self.assertEqual(proposal.source.read_bytes(), b"important data")
+            self.assertFalse(destination.exists())
+            self.assertEqual(journal.history()[1][3], "undone")
+
+    def test_undo_refuses_modified_destination(self):
+        proposal = self.ready_proposal()
+        with Journal(self.root / "history.db") as journal:
+            destination = journal.move(proposal)
+            destination.write_bytes(b"edited")
+            with self.assertRaises(ValueError):
+                journal.undo(1)
+            self.assertTrue(destination.exists())
+
+    def test_recovery_after_final_database_update_failure(self):
+        proposal = self.ready_proposal()
+        path = self.root / "history.db"
+        with Journal(path) as journal:
+            original_update = journal.update
+            def interrupted(operation, **fields):
+                if fields.get("state") == "complete":
+                    raise RuntimeError("Simulated interruption")
+                return original_update(operation, **fields)
+            with patch.object(journal, "update", side_effect=interrupted):
+                with self.assertRaises(RuntimeError):
+                    journal.move(proposal)
+        with Journal(path) as journal:
+            journal.recover()
+            self.assertEqual(journal.history()[0][3], "complete")
+            self.assertEqual(proposal.destination.read_bytes(), b"important data")
+
+    def test_publication_failure_retains_source_and_recoverable_copy(self):
+        proposal = self.ready_proposal()
+        with Journal(self.root / "history.db") as journal:
+            with patch("organizer.moves.os.link", side_effect=OSError("Unsupported filesystem")):
+                with self.assertRaises(OSError):
+                    journal.move(proposal)
+            journal.recover()
+            self.assertEqual(proposal.source.read_bytes(), b"important data")
+            self.assertEqual(journal.history()[0][3], "review")
+            self.assertEqual(next(proposal.destination.parent.glob(".organizer-*.tmp")).read_bytes(), b"important data")
+
+    def test_source_removal_failure_preserves_both_copies(self):
+        proposal = self.ready_proposal()
+        unlink = Path.unlink
+        def locked(path, *args, **kwargs):
+            if path == proposal.source:
+                raise PermissionError("Download is locked")
+            return unlink(path, *args, **kwargs)
+        with Journal(self.root / "history.db") as journal:
+            with patch.object(Path, "unlink", locked):
+                with self.assertRaises(PermissionError):
+                    journal.move(proposal)
+            journal.recover()
+            self.assertEqual(proposal.source.read_bytes(), b"important data")
+            self.assertEqual(proposal.destination.read_bytes(), b"important data")
+            self.assertEqual(journal.history()[0][3], "review")
+
+    def test_source_change_during_copy_is_preserved(self):
+        proposal = self.ready_proposal()
+        import shutil
+        copy = shutil.copyfileobj
+        def changing(origin, target, length):
+            copy(origin, target, length)
+            proposal.source.write_bytes(b"new download data")
+        with Journal(self.root / "history.db") as journal:
+            with patch("organizer.moves.shutil.copyfileobj", changing):
+                with self.assertRaises(ValueError):
+                    journal.move(proposal)
+            self.assertEqual(proposal.source.read_bytes(), b"new download data")
+            self.assertFalse(proposal.destination.exists())
 
 
 if __name__ == "__main__":
