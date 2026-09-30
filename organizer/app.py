@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QHeaderView, QCheckBox
 from .core import Rule, defaults, load_settings, load_options, preview, save_settings
 from .moves import Journal
 from .worker import MonitorWorker
-from .startup import set_startup, startup_file
+from .startup import set_startup, startup_enabled
 
 
 class MoveWorker(QThread):
@@ -144,7 +144,11 @@ class Window(QMainWindow):
             "Pause automatic sorting" if checked else "Resume automatic sorting"))
         self.pause_action.setText("Pause automatic sorting" if self.automatic.isChecked() else "Resume automatic sorting")
         self.tray_mode.toggled.connect(self.save)
-        self.login_start.setChecked(startup_file().exists())
+        try:
+            self.login_start.setChecked(startup_enabled())
+        except (OSError, ImportError, RuntimeError) as error:
+            self.login_start.setEnabled(False)
+            self.status.setText(f"Login startup unavailable: {error}")
         self.login_start.toggled.connect(self.toggle_login)
         if self.automatic.isChecked():
             QTimer.singleShot(0, lambda: self.toggle_automatic(True))
@@ -155,14 +159,17 @@ class Window(QMainWindow):
         self.activateWindow()
 
     def toggle_login(self, enabled):
+        self.login_start.setEnabled(False)
         try:
             set_startup(enabled)
             self.status.setText("Login startup enabled." if enabled else "Login startup disabled.")
-        except (OSError, ValueError) as error:
+        except (OSError, ValueError, ImportError, RuntimeError) as error:
             self.login_start.blockSignals(True)
             self.login_start.setChecked(not enabled)
             self.login_start.blockSignals(False)
             self.status.setText(f"Startup setting could not be changed: {error}")
+        finally:
+            self.login_start.setEnabled(True)
 
     def request_quit(self):
         self.quitting = True

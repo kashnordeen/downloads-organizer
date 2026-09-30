@@ -4,6 +4,61 @@ import sys
 from pathlib import Path
 
 
+def packaged_windows():
+    if sys.platform != "win32":
+        return False
+    import ctypes
+    length = ctypes.c_uint32()
+    result = ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None)
+    if result not in (0, 122, 15700):
+        raise OSError(result, "Could not check Windows package identity")
+    return result != 15700  # APPMODEL_ERROR_NO_PACKAGE
+
+
+def package_startup(enabled=None):
+    from PySide6.QtCore import QEventLoop, QTimer
+    from winrt.runtime import init_apartment, uninit_apartment, ApartmentType
+    from winrt.windows.applicationmodel import StartupTask, StartupTaskState
+    from winrt.windows.foundation import AsyncStatus
+
+    def wait(operation):
+        loop = QEventLoop()
+        poll, timeout = QTimer(), QTimer()
+        poll.timeout.connect(lambda: loop.quit() if operation.status != AsyncStatus.STARTED else None)
+        timeout.setSingleShot(True)
+        timeout.timeout.connect(loop.quit)
+        poll.start(10)
+        timeout.start(5000)
+        if operation.status == AsyncStatus.STARTED:
+            loop.exec()
+        poll.stop()
+        timeout.stop()
+        if operation.status == AsyncStatus.STARTED:
+            operation.cancel()
+            raise OSError("Windows startup request timed out")
+        return operation.get_results()
+
+    init_apartment(ApartmentType.SINGLE_THREADED)
+    try:
+        task = wait(StartupTask.get_async("DownloadsOrganizerStartup"))
+        enabled_states = {StartupTaskState.ENABLED, StartupTaskState.ENABLED_BY_POLICY}
+        if enabled is False:
+            task.disable()
+            if task.state in enabled_states:
+                raise OSError("Windows policy keeps startup enabled")
+        elif enabled is True and task.state not in enabled_states:
+            state = wait(task.request_enable_async())
+            if state not in enabled_states:
+                raise OSError("Windows has disabled startup. Review Settings > Apps > Startup; policy may prevent enabling it.")
+        return task.state in enabled_states
+    finally:
+        uninit_apartment()
+
+
+def startup_enabled():
+    return package_startup() if packaged_windows() else startup_file().exists()
+
+
 def startup_file(platform=None):
     platform = platform or sys.platform
     if platform == "win32":
@@ -24,6 +79,9 @@ def launch_command():
 
 
 def set_startup(enabled, path=None, platform=None):
+    if path is None and platform is None and packaged_windows():
+        package_startup(enabled)
+        return
     platform = platform or sys.platform
     path = path or startup_file(platform)
     if not enabled:
