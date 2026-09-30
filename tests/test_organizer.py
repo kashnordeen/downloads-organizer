@@ -128,6 +128,9 @@ class OrganizerTests(unittest.TestCase):
             self.assertEqual(proposal.source.read_bytes(), b"important data")
             self.assertEqual(journal.history()[0][3], "review")
             self.assertEqual(next(proposal.destination.parent.glob(".organizer-*.tmp")).read_bytes(), b"important data")
+            with self.assertRaises(ValueError):
+                journal.move(proposal)
+            self.assertEqual(len(journal.history()), 1)
 
     def test_source_removal_failure_preserves_both_copies(self):
         proposal = self.ready_proposal()
@@ -158,6 +161,13 @@ class OrganizerTests(unittest.TestCase):
                     journal.move(proposal)
             self.assertEqual(proposal.source.read_bytes(), b"new download data")
             self.assertFalse(proposal.destination.exists())
+
+    def test_disappearing_file_does_not_break_scan(self):
+        proposal = self.ready_proposal()
+        rules = [Rule("PDF", ["pdf"], "", str(self.root / "PDF"))]
+        with patch("organizer.core.signature", side_effect=FileNotFoundError):
+            self.assertEqual(preview(self.downloads, rules), [])
+        self.assertTrue(proposal.source.exists())
 
 
 if __name__ == "__main__":

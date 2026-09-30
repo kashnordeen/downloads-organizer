@@ -4,11 +4,12 @@ from pathlib import Path
 from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile, QTimer, QFileSystemWatcher
 from PySide6.QtWidgets import (QApplication, QFileDialog, QHeaderView, QCheckBox,
     QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
+    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget, QSystemTrayIcon, QMenu, QStyle)
 
 from .core import Rule, defaults, load_settings, load_options, preview, save_settings
 from .moves import Journal
 from .worker import MonitorWorker
+from .startup import set_startup, startup_file
 
 
 class MoveWorker(QThread):
@@ -67,6 +68,18 @@ class Window(QMainWindow):
         layout.addLayout(bar)
         self.automatic = QCheckBox("Automatically organize using saved rules")
         layout.addWidget(self.automatic)
+        preferences = QHBoxLayout()
+        self.tray_mode = QCheckBox("Keep running in tray when window closes")
+        self.tray_mode.setEnabled(QSystemTrayIcon.isSystemTrayAvailable())
+        self.tray_mode.setToolTip("If no system tray is available, closing exits safely.")
+        preferences.addWidget(self.tray_mode)
+        self.login_start = QCheckBox("Start at login")
+        self.login_start.setToolTip("Optional per-user startup. Your operating system can disable it.")
+        preferences.addWidget(self.login_start)
+        quit_button = QPushButton("Quit app")
+        quit_button.clicked.connect(self.request_quit)
+        preferences.addWidget(quit_button)
+        layout.addLayout(preferences)
         self.rules = QTableWidget(0, 5)
         self.rules.setWordWrap(False)
         self.rules.setHorizontalHeaderLabels(["Enabled", "Rule", "Extensions (comma separated)", "Filename contains", "Destination folder"])
@@ -104,19 +117,57 @@ class Window(QMainWindow):
         self.status = QLabel("Manual mode. Preview never moves files.")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
+        self.tray = QSystemTrayIcon(self.style().standardIcon(QStyle.SP_DirIcon), self)
+        self.tray.setToolTip("Downloads Organizer")
+        menu = QMenu(self)
+        menu.addAction("Show organizer", self.show_window)
+        self.pause_action = menu.addAction("Resume automatic sorting", lambda: self.automatic.setChecked(not self.automatic.isChecked()))
+        menu.addAction("Quit", self.request_quit)
+        self.tray.setContextMenu(menu)
+        self.tray.activated.connect(lambda reason: self.show_window() if reason in
+            (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick) else None)
+        if QSystemTrayIcon.isSystemTrayAvailable():
+            self.tray.show()
         if self.settings_path.exists():
             try:
                 folder, rules = load_settings(self.settings_path)
                 self.set_folder(folder, rules)
                 options = load_options(self.settings_path)
                 self.automatic.setChecked(options.get("automatic", False))
+                self.tray_mode.setChecked(options.get("tray", False))
             except ValueError as error:
                 self.status.setText(str(error) + " Original settings were preserved.")
         self.rules.itemChanged.connect(self.invalidate)
         self.load_history(recover=True)
         self.automatic.toggled.connect(self.toggle_automatic)
+        self.automatic.toggled.connect(lambda checked: self.pause_action.setText(
+            "Pause automatic sorting" if checked else "Resume automatic sorting"))
+        self.pause_action.setText("Pause automatic sorting" if self.automatic.isChecked() else "Resume automatic sorting")
+        self.tray_mode.toggled.connect(self.save)
+        self.login_start.setChecked(startup_file().exists())
+        self.login_start.toggled.connect(self.toggle_login)
         if self.automatic.isChecked():
             QTimer.singleShot(0, lambda: self.toggle_automatic(True))
+
+    def show_window(self):
+        self.showNormal()
+        self.raise_()
+        self.activateWindow()
+
+    def toggle_login(self, enabled):
+        try:
+            set_startup(enabled)
+            self.status.setText("Login startup enabled." if enabled else "Login startup disabled.")
+        except (OSError, ValueError) as error:
+            self.login_start.blockSignals(True)
+            self.login_start.setChecked(not enabled)
+            self.login_start.blockSignals(False)
+            self.status.setText(f"Startup setting could not be changed: {error}")
+
+    def request_quit(self):
+        self.quitting = True
+        self.tray.hide()
+        self.close()
 
     def wake_monitor(self):
         if self.monitor is not None:
@@ -164,7 +215,7 @@ class Window(QMainWindow):
         self.status.setText(message)
 
     def options(self):
-        return {"automatic": self.automatic.isChecked()}
+        return {"automatic": self.automatic.isChecked(), "tray": self.tray_mode.isChecked()}
 
     def load_history(self, recover=False):
         try:
@@ -221,8 +272,14 @@ class Window(QMainWindow):
         self.setEnabled(True)
         self.invalidate()
         self.load_history()
+        if self.quitting:
+            self.close()
 
     def closeEvent(self, event):
+        if not self.quitting and self.tray_mode.isChecked() and QSystemTrayIcon.isSystemTrayAvailable():
+            self.hide()
+            event.ignore()
+            return
         if self.monitor is not None and self.monitor.isRunning():
             self.quitting = True
             self.monitor.stop()
@@ -234,7 +291,10 @@ class Window(QMainWindow):
             self.status.setText("Finishing the current file safely. Close again when finished.")
             event.ignore()
         else:
+            self.tray.hide()
             event.accept()
+            if self.quitting:
+                QApplication.instance().quit()
 
     def add_rule(self, rule):
         if hasattr(self, "automatic") and self.automatic.isChecked():
@@ -343,5 +403,8 @@ def main():
         QMessageBox.information(None, "Already running", "Downloads Organizer is already running.")
         return
     window = Window(data_dir)
-    window.show()
+    if "--background" in sys.argv and window.tray_mode.isChecked() and QSystemTrayIcon.isSystemTrayAvailable():
+        app.setQuitOnLastWindowClosed(False)
+    else:
+        window.show()
     sys.exit(app.exec())

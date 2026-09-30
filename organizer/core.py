@@ -81,7 +81,14 @@ def preview(folder, rules):
             else:
                 rule = next((r for r in rules if r.matches(path)), None)
                 if rule:
-                    rows.append(Proposal(path, safe_path(rule.destination) / path.name, rule.name, signature(path)))
+                    try:
+                        observed = signature(path)
+                    except FileNotFoundError:
+                        continue
+                    except PermissionError:
+                        rows.append(Proposal(path, None, "File cannot currently be read"))
+                        continue
+                    rows.append(Proposal(path, safe_path(rule.destination) / path.name, rule.name, observed))
                     continue
             rows.append(Proposal(path, None, reason))
     return rows

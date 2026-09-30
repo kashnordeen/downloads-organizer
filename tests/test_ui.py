@@ -14,6 +14,53 @@ APP = QApplication.instance() or QApplication([])
 
 
 class DesktopFlowTest(unittest.TestCase):
+    def test_tray_close_show_and_quit(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("organizer.app.QSystemTrayIcon.isSystemTrayAvailable", return_value=True):
+                window = Window(root / "data")
+                window.set_folder(root)
+                window.tray_mode.setChecked(True)
+                window.show()
+                APP.processEvents()
+                window.close()
+                self.assertFalse(window.isVisible())
+                self.assertFalse(window.quitting)
+                window.show_window()
+                self.assertTrue(window.isVisible())
+                window.request_quit()
+                self.assertTrue(window.quitting)
+                self.assertFalse(window.tray.isVisible())
+
+    def test_no_tray_fallback_and_single_instance_lock(self):
+        from PySide6.QtCore import QLockFile
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch("organizer.app.QSystemTrayIcon.isSystemTrayAvailable", return_value=False):
+                window = Window(root / "data")
+                self.assertFalse(window.tray_mode.isEnabled())
+                window.tray_mode.setChecked(True)
+                window.show()
+                window.close()
+                self.assertFalse(window.isVisible())
+            first = QLockFile(str(root / "instance.lock"))
+            second = QLockFile(str(root / "instance.lock"))
+            self.assertTrue(first.tryLock(0))
+            self.assertFalse(second.tryLock(0))
+            first.unlock()
+            self.assertTrue(second.tryLock(0))
+            second.unlock()
+
+    def test_startup_checkbox_failure_is_reverted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            window = Window(Path(directory) / "data")
+            window.login_start.setChecked(False)
+            with patch("organizer.app.set_startup", side_effect=PermissionError("Denied")):
+                window.login_start.setChecked(True)
+            self.assertFalse(window.login_start.isChecked())
+            self.assertIn("could not be changed", window.status.text())
+            window.close()
+
     def test_automatic_backlog_new_download_and_restart_catchup(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
