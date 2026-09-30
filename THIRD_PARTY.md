@@ -32,4 +32,3 @@ redistribution terms; OS-supplied libraries retain their respective licenses.
 Inno Setup is a build tool; its generated installer contains its licensed stub.
 Its terms are available at https://github.com/jrsoftware/issrc/blob/main/license.txt.
 No license is changed by this application's MIT license.
-

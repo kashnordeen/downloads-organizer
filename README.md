@@ -144,7 +144,7 @@ python -m unittest discover -s tests -v
 python -m compileall -q organizer
 ```
 
-**28 tests** cover rule priority, exclusions, collisions, stale/changed files, recovery, undo, monitoring, stopped-period catch-up, navigation, tray behavior, startup policy handling, first-launch consent, saved settings, and rule-form validation. They passed locally on Windows; the [desktop workflow](.github/workflows/build.yml) runs them and bundled runtime checks on all release targets. Tests use temporary files and offscreen Qt windows. See [validation details and remaining gates](VALIDATION.md).
+**29 tests** cover rule priority, exclusions, collisions, stale/changed files, recovery, undo, monitoring, stopped-period catch-up, navigation, tray behavior, startup policy handling, first-launch consent, saved settings, link protection, and rule-form validation. The [desktop workflow](.github/workflows/build.yml) runs them and bundled runtime checks on all release targets. Tests use temporary files and offscreen Qt windows, with platform-specific skips. See [validation details and remaining gates](VALIDATION.md).
 
 Runtime dependencies are pinned in [`pyproject.toml`](pyproject.toml); build pins are in [`packaging/build-requirements.txt`](packaging/build-requirements.txt). Python's standard library supplies filesystem operations, JSON, SQLite, and tests.
 

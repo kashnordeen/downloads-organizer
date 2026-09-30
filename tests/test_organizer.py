@@ -2,11 +2,12 @@ import json
 import tempfile
 import os
 import time
+import sys
 from unittest.mock import patch
 import unittest
 from pathlib import Path
 
-from organizer.core import Rule, preview, load_settings, save_settings
+from organizer.core import Rule, preview, load_settings, save_settings, safe_path
 from organizer.moves import Journal
 
 
@@ -14,7 +15,7 @@ class OrganizerTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()  # macOS /var aliases /private/var.
         self.downloads = self.root / "Downloads"
         self.downloads.mkdir()
 
@@ -27,6 +28,13 @@ class OrganizerTests(unittest.TestCase):
         self.assertEqual(rows[0].destination, self.downloads / "Invoices" / source.name)
         self.assertTrue(source.exists())
         self.assertFalse((self.downloads / "Invoices").exists())
+
+    @unittest.skipIf(sys.platform == "win32", "Creating Windows symlinks requires a privilege")
+    def test_linked_folder_is_rejected(self):
+        alias = self.root / "linked-downloads"
+        alias.symlink_to(self.downloads, target_is_directory=True)
+        with self.assertRaisesRegex(ValueError, "Symbolic links"):
+            safe_path(alias)
 
     def test_skips_partial_system_unmatched_and_subfolders(self):
         for name in ["x.pdf.crdownload", "desktop.ini", "~$temp.pdf", "unknown.xyz"]:

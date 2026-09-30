@@ -13,8 +13,9 @@ def needed(entry):
     name = entry[0].lower().replace("\\", "/")
     # Widgets do not use PDF rendering, QML, or Qt's virtual keyboard.
     return not any(part in name for part in ("qt6qml", "qtqml", "qt6quick", "qtquick",
-        "qt6pdf", "qtpdf", "qt6virtualkeyboard", "qtvirtualkeyboard", "/qpdf.",
-        "qt_help_")) and (sys.platform != "win32" or Path(name).name not in {"icuuc.dll", "icudt78.dll"})
+        "qt6pdf", "qtpdf", "qt6virtualkeyboard", "qtvirtualkeyboard", "qt_help_")) \
+        and not Path(name).name.startswith(("qpdf.", "libqpdf.")) \
+        and (sys.platform != "win32" or Path(name).name not in {"icuuc.dll", "icudt78.dll"})
 analysis.binaries = [entry for entry in analysis.binaries if needed(entry)]
 analysis.datas = [entry for entry in analysis.datas if needed(entry)]
 archive = PYZ(analysis.pure)

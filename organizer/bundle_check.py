@@ -91,6 +91,12 @@ def verify(report_path):
             from winrt.windows.applicationmodel import StartupTask
             from winrt.windows.foundation import AsyncStatus
             assert StartupTask.get_async and AsyncStatus.STARTED == 0
-        report.write_text(json.dumps({"passed": True, "executable": sys.executable,
+        checks = ["native window", "workspace navigation", "window/tray icon", "preview", "move", "undo",
+                  "configuration lock", "automatic worker", "stopped-period catch-up", "frozen startup command"]
+        if tray:
+            checks.append("tray close/show/quit")
+        if sys.platform == "win32":
+            checks.append("WinRT imports")
+        report.write_text(json.dumps({"passed": True, "executable": sys.executable, "platform": sys.platform,
             "python": sys.version, "tray_available": tray, "packaged": packaged_windows(),
-            "checks": ["native window", "workspace navigation", "window/tray icon", "preview", "move", "undo", "tray close/show/quit", "configuration lock", "automatic worker", "stopped-period catch-up", "frozen startup command", "WinRT imports"]}, indent=2), encoding="utf-8")
+            "checks": checks}, indent=2), encoding="utf-8")

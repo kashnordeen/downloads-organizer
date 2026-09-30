@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths-ignore: ['docs/media/**']
+    paths-ignore: ['docs/media/**', 'VALIDATION.md']
   pull_request:
     branches: [main]
 permissions:
@@ -11,6 +11,7 @@ permissions:
 jobs:
   sources:
     runs-on: ubuntu-22.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -46,6 +47,7 @@ jobs:
           - os: macos-15
             name: macos-arm64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
     env:
       QT_QPA_PLATFORM: offscreen
     steps:
@@ -69,6 +71,7 @@ jobs:
       - name: Install pinned dependencies
         run: python -m pip install -e . -r packaging/runtime-requirements.txt -r packaging/build-requirements.txt pip-audit
       - name: Tests and dependency audit
+        timeout-minutes: 5
         run: |
           python -m compileall -q organizer packaging tests
           python -m unittest discover -s tests -v

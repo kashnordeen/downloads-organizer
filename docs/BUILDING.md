@@ -102,4 +102,3 @@ Official references: [PyInstaller](https://pyinstaller.org/en/stable/usage.html)
 [per-user Inno Setup](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm),
 [Microsoft app manifests](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests),
 and [Apple opening guidance](https://support.apple.com/en-us/102445).
-

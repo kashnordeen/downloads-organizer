@@ -22,7 +22,7 @@ class DesktopFlowTest(unittest.TestCase):
 
     def test_first_launch_requires_selection_and_preserves_saved_settings(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             downloads = root / "Downloads"
             downloads.mkdir()
             source = downloads / "leave-me.pdf"
@@ -52,16 +52,17 @@ class DesktopFlowTest(unittest.TestCase):
         from organizer.ui import RuleDialog
         from organizer.core import Rule
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             window = Window(root / "data")
             window.set_folder(root)
             dialog = RuleDialog(window, Rule("PDFs", [".PDF"], "", str(root)))
             with patch.object(QMessageBox, "warning") as warning:
                 dialog.accept()
                 warning.assert_called_once()
-            self.assertIsNone(dialog.rule)
-            dialog.destination.setText(str(root / "PDFs"))
-            dialog.accept()
+                self.assertIsNone(dialog.rule)
+                dialog.destination.setText(str(root / "PDFs"))
+                dialog.accept()  # Never let a failing check leave a modal prompt open in CI.
+                self.assertEqual(warning.call_count, 1)
             self.assertEqual(dialog.rule.extensions, ["pdf"])
             with patch("organizer.app.RuleDialog", return_value=dialog):
                 with patch.object(dialog, "exec", return_value=1):
@@ -72,7 +73,7 @@ class DesktopFlowTest(unittest.TestCase):
 
     def test_workspace_navigation_preserves_preview_and_icon(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             (root / "sample.pdf").write_bytes(b"data")
             window = Window(root / "data")
             window.set_folder(root)
@@ -92,7 +93,7 @@ class DesktopFlowTest(unittest.TestCase):
 
     def test_tray_close_show_and_quit(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             with patch("organizer.app.QSystemTrayIcon.isSystemTrayAvailable", return_value=True):
                 window = Window(root / "data")
                 window.set_folder(root)
@@ -111,7 +112,7 @@ class DesktopFlowTest(unittest.TestCase):
     def test_no_tray_fallback_and_single_instance_lock(self):
         from PySide6.QtCore import QLockFile
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             with patch("organizer.app.QSystemTrayIcon.isSystemTrayAvailable", return_value=False):
                 window = Window(root / "data")
                 self.assertFalse(window.tray_mode.isEnabled())
@@ -129,7 +130,7 @@ class DesktopFlowTest(unittest.TestCase):
 
     def test_startup_checkbox_failure_is_reverted(self):
         with tempfile.TemporaryDirectory() as directory:
-            window = Window(Path(directory) / "data")
+            window = Window(Path(directory).resolve() / "data")
             window.login_start.setChecked(False)
             with patch("organizer.app.set_startup", side_effect=PermissionError("Denied")):
                 window.login_start.setChecked(True)
@@ -139,7 +140,7 @@ class DesktopFlowTest(unittest.TestCase):
 
     def test_automatic_backlog_new_download_and_restart_catchup(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             downloads = root / "Downloads"
             downloads.mkdir()
             def ready(name):
@@ -196,7 +197,7 @@ class DesktopFlowTest(unittest.TestCase):
 
     def test_preview_move_restart_and_undo(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             downloads = root / "Downloads"
             downloads.mkdir()
             source = downloads / "report.pdf"
@@ -226,7 +227,7 @@ class DesktopFlowTest(unittest.TestCase):
 
     def test_editing_rules_invalidates_preview(self):
         with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
+            root = Path(directory).resolve()
             (root / "sample.pdf").write_bytes(b"data")
             window = Window(root / "data")
             window.set_folder(root)

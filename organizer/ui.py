@@ -26,6 +26,7 @@ class RuleDialog(QDialog):
         self.contains = QLineEdit(rule.contains)
         self.contains.setPlaceholderText("Optional text in the filename")
         self.destination = QLineEdit(rule.destination)
+        self.destination.setAccessibleName("Destination folder")
         destination = QHBoxLayout()
         destination.addWidget(self.destination)
         destination.addWidget(button("Browse…", self.browse))
@@ -34,7 +35,7 @@ class RuleDialog(QDialog):
         layout.addRow("&Name", self.name)
         layout.addRow("&Extensions", self.extensions)
         layout.addRow("Filename &contains", self.contains)
-        layout.addRow("&Destination", destination)
+        layout.addRow("Destination", destination)
         layout.addRow(self.enabled)
         note = QLabel("Use an extension, a filename filter, or both. Rules match from top to bottom.")
         note.setWordWrap(True)
@@ -132,7 +133,7 @@ def apply_theme(window, scheme=None):
     window.setPalette(palette)
     window.setStyleSheet(f"""
         QWidget {{ color: {ink}; font-size: 14px; }}
-        QMainWindow, QWidget#workspace {{ background: {bg}; }}
+        QMainWindow, QDialog, QWidget#workspace {{ background: {bg}; }}
         QWidget#sidebar, QFrame#folderCard {{ background: {surface}; }}
         QWidget#sidebar {{ border-right: 1px solid {border}; }}
         QFrame#folderCard {{ border: 1px solid {border}; border-radius: 8px; }}
@@ -334,6 +335,7 @@ def build_ui(window):
     settings.addWidget(help_text)
     from . import __version__
     about = QLabel(f"Downloads Organizer {__version__} · Files stay local\nSettings and history: {window.data_dir}")
+    about.setObjectName("about")
     about.setWordWrap(True)
     about.setTextInteractionFlags(Qt.TextSelectableByMouse)
     settings.addWidget(about)
