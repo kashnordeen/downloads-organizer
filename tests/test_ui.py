@@ -14,6 +14,54 @@ APP = QApplication.instance() or QApplication([])
 
 
 class DesktopFlowTest(unittest.TestCase):
+    def test_automatic_backlog_new_download_and_restart_catchup(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            def ready(name):
+                path = downloads / name
+                path.write_bytes(b"download")
+                os.utime(path, (time.time() - 10, time.time() - 10))
+                return path
+            old = ready("old.pdf")
+            partial = ready("still.pdf.crdownload")
+            window = Window(root / "data")
+            window.set_folder(downloads)
+            window.automatic.setChecked(True)
+            self.wait_until(lambda: window.monitor.pending.backlog is not None)
+            new = ready("new.pdf")
+            self.wait_until(lambda: not old.exists() and not new.exists())
+            from organizer.moves import Journal
+            with Journal(root / "data" / "history.db") as journal:
+                sources = [Path(row[1]).name for row in reversed(journal.history())]
+            self.assertEqual(sources, ["old.pdf", "new.pdf"])
+            self.assertTrue(partial.exists())
+            window.close()
+            self.wait_until(lambda: not window.monitor.isRunning())
+            APP.processEvents()
+            offline = ready("while-stopped.pdf")
+            restarted = Window(root / "data")
+            self.addCleanup(lambda: self.stop_monitor(restarted))
+            self.wait_until(lambda: not offline.exists())
+            self.assertTrue(restarted.automatic.isChecked())
+            self.stop_monitor(restarted)
+
+    def stop_monitor(self, window):
+        window.quitting = True
+        if window.monitor is not None and window.monitor.isRunning():
+            window.monitor.stop()
+            self.wait_until(lambda: not window.monitor.isRunning())
+        APP.processEvents()
+        window.close()
+
+    def wait_until(self, condition):
+        deadline = time.monotonic() + 12
+        while not condition() and time.monotonic() < deadline:
+            APP.processEvents()
+            time.sleep(.01)
+        self.assertTrue(condition(), "Timed out waiting for desktop operation")
+
     def test_preview_move_restart_and_undo(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

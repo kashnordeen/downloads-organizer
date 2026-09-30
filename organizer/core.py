@@ -92,14 +92,14 @@ def defaults(folder):
             for name, extensions in CATEGORIES.items()]
 
 
-def save_settings(path, folder, rules):
+def save_settings(path, folder, rules, options=None):
     folder = safe_path(folder)
     for rule in rules:
         rule.validate(folder)
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(".tmp")
     with temp.open("w", encoding="utf-8") as stream:
-        json.dump({"folder": str(folder), "rules": [asdict(r) for r in rules]}, stream, indent=2)
+        json.dump({"folder": str(folder), "rules": [asdict(r) for r in rules], "options": options or {}}, stream, indent=2)
         stream.flush()
         os.fsync(stream.fileno())
     os.replace(temp, path)
@@ -115,3 +115,10 @@ def load_settings(path):
         return folder, rules
     except (TypeError, KeyError, OSError, ValueError) as error:
         raise ValueError(f"Settings could not be loaded: {error}") from error
+
+
+def load_options(path):
+    data = json.loads(path.read_text(encoding="utf-8")).get("options", {})
+    if not isinstance(data, dict) or any(not isinstance(v, bool) for v in data.values()):
+        raise ValueError("Invalid saved options; automatic sorting disabled")
+    return data

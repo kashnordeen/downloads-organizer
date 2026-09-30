@@ -40,8 +40,14 @@ class Journal:
     def history(self):
         return self.db.execute("SELECT id,source,destination,state,error FROM operations ORDER BY id DESC").fetchall()
 
+    def unresolved_sources(self):
+        return {row[0] for row in self.db.execute(
+            "SELECT source FROM operations WHERE state IN ('pending','published','review')")}
+
     def move(self, proposal, undo_of=None):
         source = safe_path(proposal.source)
+        if str(source) in self.unresolved_sources():
+            raise ValueError("An earlier operation for this file needs review; no duplicate move attempted")
         if proposal.destination is None or proposal.signature != signature(source):
             raise ValueError("File changed since preview; preview again")
         if time.time_ns() - source.stat().st_mtime_ns < 2_000_000_000:

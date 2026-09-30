@@ -1,13 +1,14 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile
-from PySide6.QtWidgets import (QApplication, QFileDialog, QHeaderView,
+from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile, QTimer, QFileSystemWatcher
+from PySide6.QtWidgets import (QApplication, QFileDialog, QHeaderView, QCheckBox,
     QHBoxLayout, QLabel, QMainWindow, QMessageBox, QPushButton,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from .core import Rule, defaults, load_settings, preview, save_settings
+from .core import Rule, defaults, load_settings, load_options, preview, save_settings
 from .moves import Journal
+from .worker import MonitorWorker
 
 
 class MoveWorker(QThread):
@@ -46,6 +47,10 @@ class Window(QMainWindow):
         self.folder = None
         self.proposals = []
         self.worker = None
+        self.monitor = None
+        self.quitting = False
+        self.watcher = QFileSystemWatcher(self)
+        self.watcher.directoryChanged.connect(self.wake_monitor)
         body = QWidget()
         self.setCentralWidget(body)
         layout = QVBoxLayout(body)
@@ -60,6 +65,8 @@ class Window(QMainWindow):
         choose.clicked.connect(self.choose_folder)
         bar.addWidget(choose)
         layout.addLayout(bar)
+        self.automatic = QCheckBox("Automatically organize using saved rules")
+        layout.addWidget(self.automatic)
         self.rules = QTableWidget(0, 5)
         self.rules.setWordWrap(False)
         self.rules.setHorizontalHeaderLabels(["Enabled", "Rule", "Extensions (comma separated)", "Filename contains", "Destination folder"])
@@ -101,10 +108,63 @@ class Window(QMainWindow):
             try:
                 folder, rules = load_settings(self.settings_path)
                 self.set_folder(folder, rules)
+                options = load_options(self.settings_path)
+                self.automatic.setChecked(options.get("automatic", False))
             except ValueError as error:
                 self.status.setText(str(error) + " Original settings were preserved.")
         self.rules.itemChanged.connect(self.invalidate)
         self.load_history(recover=True)
+        self.automatic.toggled.connect(self.toggle_automatic)
+        if self.automatic.isChecked():
+            QTimer.singleShot(0, lambda: self.toggle_automatic(True))
+
+    def wake_monitor(self):
+        if self.monitor is not None:
+            self.monitor.wakeup.set()
+
+    def toggle_automatic(self, enabled):
+        if not enabled:
+            if self.monitor is not None and self.monitor.isRunning():
+                self.monitor.stop()
+            self.save()
+            return
+        try:
+            rules = self.read_rules()
+            if self.worker is not None and self.worker.isRunning():
+                raise ValueError("Wait for the current operation to finish")
+            if self.monitor is not None and self.monitor.isRunning():
+                raise ValueError("Previous monitoring session is stopping; try again shortly")
+            save_settings(self.settings_path, self.folder, rules, self.options())
+            if self.watcher.directories():
+                self.watcher.removePaths(self.watcher.directories())
+            self.watcher.addPath(str(self.folder))
+            self.monitor = MonitorWorker(self.folder, rules, self.data_dir, self)
+            self.monitor.report.connect(self.status.setText)
+            self.monitor.changed.connect(self.load_history)
+            self.monitor.finished.connect(self.monitor_finished)
+            self.organize.setEnabled(False)
+            self.undo_button.setEnabled(False)
+            self.monitor.start()
+            self.status.setText("Automatic mode: checking startup files first, then watching new downloads.")
+        except (ValueError, OSError) as error:
+            self.automatic.blockSignals(True)
+            self.automatic.setChecked(False)
+            self.automatic.blockSignals(False)
+            self.status.setText(str(error))
+
+    def monitor_finished(self):
+        if self.quitting:
+            self.close()
+            return
+        message = self.status.text()
+        if self.automatic.isChecked():
+            self.automatic.setChecked(False)
+        self.undo_button.setEnabled(True)
+        self.invalidate()
+        self.status.setText(message)
+
+    def options(self):
+        return {"automatic": self.automatic.isChecked()}
 
     def load_history(self, recover=False):
         try:
@@ -133,6 +193,9 @@ class Window(QMainWindow):
         self.start_worker(operation)
 
     def start_worker(self, work):
+        if self.monitor is not None and self.monitor.isRunning():
+            self.status.setText("Pause automatic sorting before a manual move or undo.")
+            return
         self.setEnabled(False)
         self.worker = MoveWorker(self.data_dir, work, self)
         self.worker.report.connect(self.status.setText)
@@ -142,6 +205,8 @@ class Window(QMainWindow):
     def invalidate(self):
         self.proposals = []
         self.organize.setEnabled(False)
+        if self.automatic.isChecked():
+            self.automatic.setChecked(False)
 
     def execute(self):
         proposals = [p for p in self.proposals if p.destination is not None]
@@ -158,6 +223,12 @@ class Window(QMainWindow):
         self.load_history()
 
     def closeEvent(self, event):
+        if self.monitor is not None and self.monitor.isRunning():
+            self.quitting = True
+            self.monitor.stop()
+            self.status.setText("Finishing the current file before exiting.")
+            event.ignore()
+            return
         if self.worker is not None and self.worker.isRunning():
             self.worker.requestInterruption()
             self.status.setText("Finishing the current file safely. Close again when finished.")
@@ -166,6 +237,8 @@ class Window(QMainWindow):
             event.accept()
 
     def add_rule(self, rule):
+        if hasattr(self, "automatic") and self.automatic.isChecked():
+            self.invalidate()
         row = self.rules.rowCount()
         self.rules.insertRow(row)
         enabled = QTableWidgetItem()
@@ -190,6 +263,8 @@ class Window(QMainWindow):
         return rules
 
     def set_folder(self, folder, rules=None):
+        if hasattr(self, "automatic") and self.automatic.isChecked():
+            self.automatic.setChecked(False)
         self.folder = Path(folder)
         self.folder_label.setText(str(folder))
         self.rules.setRowCount(0)
@@ -214,6 +289,7 @@ class Window(QMainWindow):
     def remove_rule(self):
         row = self.rules.currentRow()
         if row >= 0:
+            self.invalidate()
             self.rules.removeRow(row)
 
     def reorder(self, direction):
@@ -228,8 +304,8 @@ class Window(QMainWindow):
 
     def save(self):
         try:
-            save_settings(self.settings_path, self.folder, self.read_rules())
-            self.status.setText("Rules saved. No files were moved.")
+            save_settings(self.settings_path, self.folder, self.read_rules(), self.options())
+            self.status.setText("Settings saved.")
         except (ValueError, OSError) as error:
             self.status.setText(str(error))
 
@@ -247,7 +323,8 @@ class Window(QMainWindow):
                     self.files.setItem(row, col, item)
             count = sum(p.destination is not None for p in self.proposals)
             self.status.setText(f"{count} files match your rules. No files were moved.")
-            self.organize.setEnabled(count > 0)
+            self.organize.setEnabled(count > 0 and not self.automatic.isChecked()
+                                     and not (self.monitor and self.monitor.isRunning()))
         except (ValueError, OSError) as error:
             self.proposals = []
             self.files.setRowCount(0)
