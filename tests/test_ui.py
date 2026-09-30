@@ -20,6 +20,56 @@ class DesktopFlowTest(unittest.TestCase):
         startup.start()
         self.addCleanup(startup.stop)
 
+    def test_first_launch_requires_selection_and_preserves_saved_settings(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            source = downloads / "leave-me.pdf"
+            source.write_bytes(b"unchanged")
+            window = Window(root / "data")
+            with patch("organizer.app.initial_folder", return_value=None):
+                window.setup_first_run()
+            self.assertIsNone(window.folder)
+            self.assertFalse(window.settings_path.exists())
+            with patch("organizer.app.initial_folder", return_value=str(downloads)):
+                window.setup_first_run()
+            self.assertEqual(window.pages.currentIndex(), 1)
+            self.assertFalse(window.automatic.isChecked())
+            self.assertEqual(source.read_bytes(), b"unchanged")
+            window.rules.item(0, 1).setText("My documents")
+            window.save()
+            window.close()
+            restarted = Window(root / "data")
+            with patch("organizer.app.initial_folder") as setup:
+                restarted.setup_first_run()
+                setup.assert_not_called()
+            self.assertEqual(restarted.read_rules()[0].name, "My documents")
+            self.assertFalse(restarted.automatic.isChecked())
+            restarted.close()
+
+    def test_rule_form_rejects_invalid_destination_and_saves_normalized_rule(self):
+        from organizer.ui import RuleDialog
+        from organizer.core import Rule
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            window = Window(root / "data")
+            window.set_folder(root)
+            dialog = RuleDialog(window, Rule("PDFs", [".PDF"], "", str(root)))
+            with patch.object(QMessageBox, "warning") as warning:
+                dialog.accept()
+                warning.assert_called_once()
+            self.assertIsNone(dialog.rule)
+            dialog.destination.setText(str(root / "PDFs"))
+            dialog.accept()
+            self.assertEqual(dialog.rule.extensions, ["pdf"])
+            with patch("organizer.app.RuleDialog", return_value=dialog):
+                with patch.object(dialog, "exec", return_value=1):
+                    window.edit_rule(new=True)
+            self.assertEqual(window.read_rules()[-1].name, "PDFs")
+            self.assertEqual(window.files.rowCount(), 0)
+            window.close()
+
     def test_workspace_navigation_preserves_preview_and_icon(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

@@ -9,7 +9,7 @@ from .core import Rule, defaults, load_settings, load_options, preview, save_set
 from .moves import Journal
 from .worker import MonitorWorker
 from .startup import set_startup, startup_enabled
-from .ui import build_ui
+from .ui import build_ui, RuleDialog, initial_folder
 
 
 class MoveWorker(QThread):
@@ -112,6 +112,26 @@ class Window(QMainWindow):
         self.showNormal()
         self.raise_()
         self.activateWindow()
+
+    def setup_first_run(self):
+        if self.settings_path.exists():
+            return
+        suggestion = QStandardPaths.writableLocation(QStandardPaths.DownloadLocation)
+        if not suggestion or not Path(suggestion).is_dir():
+            suggestion = ""
+        folder = initial_folder(self, suggestion)
+        if folder:
+            self.set_folder(folder)
+            self.save()
+            self.show_page(1)
+
+    def show_help(self):
+        QMessageBox.information(self, "Getting started",
+            "1. Choose the folder to organize.\n2. Review starter rules or add your own.\n"
+            "3. Save rules and refresh Preview.\n4. Organize the previewed files.\n\n"
+            "Automatic sorting is optional. Editing rules pauses it. History lets you undo completed moves.\n\n"
+            "Keep the installed app in its final location before enabling Start at login. "
+            "Allow access to your chosen folder in your operating system's privacy settings when prompted.")
 
     def toggle_login(self, enabled):
         self.login_start.setEnabled(False)
@@ -264,11 +284,30 @@ class Window(QMainWindow):
             if self.quitting:
                 QApplication.instance().quit()
 
-    def add_rule(self, rule):
+    def edit_rule(self, new=False):
+        if self.folder is None:
+            self.status.setText("Choose a folder before adding rules.")
+            return
+        row = self.rules.currentRow()
+        if not new and row < 0:
+            self.status.setText("Select a rule to edit first.")
+            return
+        rule = Rule("", [], "", str(self.folder / "Organized")) if new else Rule(
+            self.rules.item(row, 1).text(), self.rules.item(row, 2).text().split(","),
+            self.rules.item(row, 3).text(), self.rules.item(row, 4).text(),
+            self.rules.item(row, 0).checkState() == Qt.Checked)
+        dialog = RuleDialog(self, rule)
+        if dialog.exec():
+            self.invalidate()
+            self.add_rule(dialog.rule, None if new else row)
+            self.status.setText("Rule updated. Save rules, then refresh Preview.")
+
+    def add_rule(self, rule, row=None):
         if hasattr(self, "automatic") and self.automatic.isChecked():
             self.invalidate()
-        row = self.rules.rowCount()
-        self.rules.insertRow(row)
+        if row is None:
+            row = self.rules.rowCount()
+            self.rules.insertRow(row)
         enabled = QTableWidgetItem()
         enabled.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
         enabled.setCheckState(Qt.Checked if rule.enabled else Qt.Unchecked)
@@ -385,4 +424,5 @@ def main():
         app.setQuitOnLastWindowClosed(False)
     else:
         window.show()
+        QTimer.singleShot(0, window.setup_first_run)
     sys.exit(app.exec())

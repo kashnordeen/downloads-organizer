@@ -3,11 +3,91 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QIcon, QPalette, QColor
-from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame,
+from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QDialog,
+    QDialogButtonBox, QFileDialog, QFormLayout, QLineEdit, QMessageBox,
     QHeaderView, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget,
     QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon)
 
 from .core import Rule
+
+
+class RuleDialog(QDialog):
+    """Use the engine's validation before a rule enters the table."""
+    def __init__(self, parent, rule):
+        super().__init__(parent)
+        self.setWindowTitle("Edit organization rule")
+        self.setMinimumWidth(520)
+        self.folder = parent.folder
+        self.rule = None
+        layout = QFormLayout(self)
+        self.name = QLineEdit(rule.name)
+        self.extensions = QLineEdit(", ".join(rule.extensions))
+        self.extensions.setPlaceholderText("pdf, docx, txt")
+        self.contains = QLineEdit(rule.contains)
+        self.contains.setPlaceholderText("Optional text in the filename")
+        self.destination = QLineEdit(rule.destination)
+        destination = QHBoxLayout()
+        destination.addWidget(self.destination)
+        destination.addWidget(button("Browse…", self.browse))
+        self.enabled = QCheckBox("Enable this rule")
+        self.enabled.setChecked(rule.enabled)
+        layout.addRow("&Name", self.name)
+        layout.addRow("&Extensions", self.extensions)
+        layout.addRow("Filename &contains", self.contains)
+        layout.addRow("&Destination", destination)
+        layout.addRow(self.enabled)
+        note = QLabel("Use an extension, a filename filter, or both. Rules match from top to bottom.")
+        note.setWordWrap(True)
+        layout.addRow(note)
+        buttons = QDialogButtonBox(QDialogButtonBox.Save | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def browse(self):
+        folder = QFileDialog.getExistingDirectory(self, "Choose destination", self.destination.text())
+        if folder:
+            self.destination.setText(folder)
+
+    def accept(self):
+        rule = Rule(self.name.text().strip(), self.extensions.text().split(","),
+                    self.contains.text(), self.destination.text(), self.enabled.isChecked())
+        try:
+            rule.validate(self.folder)
+        except (ValueError, OSError) as error:
+            QMessageBox.warning(self, "Check this rule", str(error))
+            return
+        self.rule = rule
+        super().accept()
+
+
+def initial_folder(window, suggestion):
+    dialog = QDialog(window)
+    dialog.setWindowTitle("Welcome to Downloads Organizer")
+    dialog.setMinimumWidth(520)
+    layout = QVBoxLayout(dialog)
+    note = QLabel("Choose the folder you want to organize.\n\n"
+                  "We will add starter rules for documents, images, and other file types. "
+                  "Review Rules, then refresh Preview to see where files will go.\n\n"
+                  "Automatic sorting starts off. Nothing moves during setup or preview.")
+    note.setWordWrap(True)
+    layout.addWidget(note)
+    folder = QLineEdit(suggestion)
+    folder.setReadOnly(True)
+    layout.addWidget(folder)
+    def browse():
+        selected = QFileDialog.getExistingDirectory(dialog, "Choose folder to organize", folder.text())
+        if selected:
+            folder.setText(selected)
+    layout.addWidget(button("Choose another folder…", browse))
+    buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+    buttons.button(QDialogButtonBox.Ok).setText("Use this folder")
+    buttons.button(QDialogButtonBox.Ok).setEnabled(bool(suggestion))
+    folder.textChanged.connect(lambda value: buttons.button(QDialogButtonBox.Ok).setEnabled(bool(value)))
+    buttons.accepted.connect(dialog.accept)
+    buttons.rejected.connect(dialog.reject)
+    layout.addWidget(buttons)
+    return folder.text() if dialog.exec() == QDialog.Accepted else None
 
 
 def button(text, callback, primary=False):
@@ -209,7 +289,8 @@ def build_ui(window):
     window.rules.horizontalHeader().setMinimumSectionSize(44)
     rules_page.addWidget(window.rules, 1)
     rule_actions = QHBoxLayout()
-    for text, callback in [("Add rule", lambda: window.add_rule(Rule("New rule", [], "", ""))),
+    for text, callback in [("Add rule", lambda: window.edit_rule(new=True)),
+                           ("Edit selected", window.edit_rule),
                            ("Remove selected", window.remove_rule),
                            ("Move up", lambda: window.reorder(-1)), ("Move down", lambda: window.reorder(1))]:
         rule_actions.addWidget(button(text, callback))
@@ -251,6 +332,12 @@ def build_ui(window):
     help_text.setProperty("muted", True)
     help_text.setWordWrap(True)
     settings.addWidget(help_text)
+    from . import __version__
+    about = QLabel(f"Downloads Organizer {__version__} · Files stay local\nSettings and history: {window.data_dir}")
+    about.setWordWrap(True)
+    about.setTextInteractionFlags(Qt.TextSelectableByMouse)
+    settings.addWidget(about)
+    settings.addWidget(button("Getting started", window.show_help))
     settings.addStretch()
     quit_row = QHBoxLayout()
     quit_row.addWidget(button("Quit app", window.request_quit))
