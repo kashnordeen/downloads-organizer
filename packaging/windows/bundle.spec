@@ -18,6 +18,9 @@ def needed(entry):
         and (sys.platform != "win32" or Path(name).name not in {"icuuc.dll", "icudt78.dll"})
 analysis.binaries = [entry for entry in analysis.binaries if needed(entry)]
 analysis.datas = [entry for entry in analysis.datas if needed(entry)]
+if sys.platform.startswith("linux"):
+    # Native libraries stay distribution-managed; Python and Qt remain bundled.
+    analysis.exclude_system_libraries()
 archive = PYZ(analysis.pure)
 executable = EXE(archive, analysis.scripts, [], exclude_binaries=True,
     name="DownloadsOrganizer", console=False, upx=False,

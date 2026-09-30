@@ -5,7 +5,7 @@ import sys
 import subprocess
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QLibraryInfo
 from PySide6.QtGui import QImage
 
 root = Path(__file__).resolve().parent.parent
@@ -31,6 +31,14 @@ if sys.platform == "darwin":
     subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(assets / "Organizer.icns")], check=True)
 licenses = root / "licenses"
 licenses.mkdir(exist_ok=True)
+if sys.platform.startswith("linux"):
+    import ctypes
+    library = next(Path(QLibraryInfo.path(QLibraryInfo.LibrariesPath)).glob("libicuuc.so.73*"))
+    icu = ctypes.CDLL(str(library))
+    version = (ctypes.c_uint8 * 4)()
+    icu.u_getVersion_73(version)
+    if tuple(version[:2]) != (73, 2):
+        raise RuntimeError("Update the bundled ICU notice to match the new runtime version")
 for name in ["PySide6", "PySide6_Essentials", "shiboken6", "pyinstaller", "winrt-runtime",
              "winrt-Windows.ApplicationModel", "winrt-Windows.Foundation", "typing_extensions"]:
     if name.startswith("winrt") and sys.platform != "win32":

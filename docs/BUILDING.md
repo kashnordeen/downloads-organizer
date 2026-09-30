@@ -22,6 +22,8 @@ Python is included; there is no account or server to configure.
   `sudo apt install ./DownloadsOrganizer-0.2.0-linux-x64.deb` on Ubuntu/Debian.
   Or extract the portable tar.gz and run `DownloadsOrganizer/DownloadsOrganizer`.
   The portable build still needs the native display libraries listed in the workflow.
+  Native system libraries remain managed by the distribution; the `.deb` declares
+  the required packages so its installer can resolve them.
   Builds target glibc 2.34 or newer; the build/test runner uses Ubuntu 22.04.
 
 Windows binaries are unsigned. SmartScreen/antivirus reputation checks may show
@@ -95,7 +97,8 @@ sorting, catch-up after stopping, and frozen startup commands. Tray actions are
 tested when a system tray is available. It does not organize your Downloads or
 change your login startup registration.
 
-CI runs Qt offscreen. Real desktop tray/login/reboot behavior, OS security prompts,
+CI tests use Qt offscreen; Linux bundle and installation checks also launch with
+the X11 plugin under Xvfb. Real desktop tray/login/reboot behavior, OS security prompts,
 earlier OS versions, and signed installs need separate manual testing.
 
 Official references: [PyInstaller](https://pyinstaller.org/en/stable/usage.html),

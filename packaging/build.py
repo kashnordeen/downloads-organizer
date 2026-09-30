@@ -48,9 +48,10 @@ if __name__ == "__main__":
         (stage / "DEBIAN").mkdir(parents=True, exist_ok=True)
         (stage / "DEBIAN/control").write_text(f"Package: downloads-organizer\nVersion: {__version__}\n"
             "Architecture: amd64\nMaintainer: kashnordeen <kash.nordeen@gmail.com>\n"
-            "Depends: libc6 (>= 2.34), libgl1, libegl1, libfontconfig1, libdbus-1-3, libxkbcommon0, "
+            "Depends: libc6 (>= 2.34), libstdc++6, libgcc-s1, libgl1, libegl1, libopengl0, libfontconfig1, libdbus-1-3, libxkbcommon0, "
             "libxcb-cursor0, libxcb-icccm4, libxcb-image0, libxcb-keysyms1, libxcb-render-util0, "
-            "libxcb-xinerama0, libxcb-xkb1, libxkbcommon-x11-0\n"
+            "libxcb-xinerama0, libxcb-xkb1, libxkbcommon-x11-0, libgtk-3-0, libssl3, libsqlite3-0, "
+            "libbz2-1.0, liblzma5, libreadline8, libexpat1, zlib1g, libwayland-client0, libwayland-cursor0, libwayland-egl1, libgssapi-krb5-2\n"
             "Section: utils\nPriority: optional\nDescription: Local Downloads organizer with preview and undo\n", encoding="utf-8")
         shutil.copytree(bundle, stage / "opt/downloads-organizer", dirs_exist_ok=True)
         desktop = stage / "usr/share/applications/downloads-organizer.desktop"
