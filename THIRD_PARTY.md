@@ -1,17 +1,35 @@
 # Third-party notices
 
-Project code is MIT-licensed. Dependencies retain their separate licenses.
-
-This one-folder bundle dynamically loads unmodified Python and Qt/PySide DLLs. Keep the entire folder and its notices together. Qt DLLs can be replaced by compatible builds; rebuilding the organizer from the supplied source is also supported. This application does not restrict reverse engineering needed to debug changes to LGPL libraries.
+Application code is MIT-licensed. Dependencies retain their own licenses.
+The app dynamically loads unmodified Python, Qt/PySide, and Shiboken libraries.
+Keep the entire bundle and its notices together. You may replace compatible
+LGPL libraries; reverse engineering needed to debug changes to those libraries
+is permitted. No application lock prevents replacing them.
 
 | Component | Version | License / source |
 |---|---|---|
 | CPython | 3.14.7 | PSF and included third-party notices in Python-LICENSE.txt; https://www.python.org/downloads/source/ |
-| Qt / PySide / Shiboken | 6.11.2 | LGPL v3 option for the used Core, Gui, Widgets modules; https://download.qt.io/archive/qt/6.11/6.11.2/ and https://code.qt.io/cgit/pyside/pyside-setup.git/ |
-| PyWinRT runtime, ApplicationModel, Foundation | 3.2.1 | MIT; https://github.com/pywinrt/pywinrt/tree/v3.2.1 |
-| typing_extensions | 4.16.0 | PSF; https://github.com/python/typing_extensions |
+| Qt Base, SVG, Image Formats, Translations, Wayland | 6.11.2 | LGPL v3 option for used modules, plus their third-party notices; source archives supplied with release |
+| PySide / Shiboken | 6.11.2 | LGPL v3 option; source archive supplied with release |
+| PyWinRT runtime, ApplicationModel, Foundation (Windows) | 3.2.1 | MIT; https://github.com/pywinrt/pywinrt/tree/v3.2.1 |
+| typing_extensions (Windows) | 4.16.0 | PSF; https://github.com/python/typing_extensions |
 | PyInstaller bootloader | 6.22.3 | GPL v2 with bootloader distribution exception; https://github.com/pyinstaller/pyinstaller/tree/v6.22.3 |
 
-License copies are in `licenses/`. Qt wheels include a commercial-license reference as an alternative; the application uses the open-source LGPL option stated in the package metadata. LGPL v3 and GPL v3 texts accompany that option. The bundled Python notices also cover its included libraries, including OpenSSL and SQLite.
+License copies, third-party attribution manifests, and referenced license files
+are under `licenses/` inside each bundle. Qt wheels also include a commercial
+license reference as an alternative; this app uses the open-source LGPL option.
+LGPL v3 and GPL v3 texts accompany it. Qt's unused PDF, QML/Quick, and virtual
+keyboard plugins/libraries are excluded from these Widgets builds.
 
-Before publicly distributing compiled bundles, complete the corresponding-source delivery and full Qt third-party attribution review, retain all runtime notices, and verify the licensing of replacement builds. That binary-release review is not yet complete. Publishing this application's MIT-licensed source does not replace those dependency obligations.
+The release includes `corresponding-source-6.11.2.tar.gz`, containing upstream
+sources and checksums. [Build and replacement instructions](docs/DEPENDENCIES.md)
+explain rebuilding the application or replacing compatible library binaries.
+The application's tagged source is also available on the release page.
+
+Python's notices cover its included libraries, including OpenSSL and SQLite.
+Windows runtime DLLs supplied by official Python/Qt wheels retain Microsoft's
+redistribution terms; OS-supplied libraries retain their respective licenses.
+Inno Setup is a build tool; its generated installer contains its licensed stub.
+Its terms are available at https://github.com/jrsoftware/issrc/blob/main/license.txt.
+No license is changed by this application's MIT license.
+

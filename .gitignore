@@ -16,3 +16,5 @@ dist/
 .DS_Store
 Thumbs.db
 tmp*/
+licenses/upstream/
+packaging/windows/Assets/*.icns

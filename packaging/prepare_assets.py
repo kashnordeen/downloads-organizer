@@ -2,6 +2,7 @@
 import importlib.metadata
 import shutil
 import sys
+import subprocess
 from pathlib import Path
 
 from PySide6.QtCore import Qt
@@ -18,11 +19,28 @@ for name, size in [("StoreLogo.png", 50), ("Square44x44Logo.png", 44),
     image = source.scaled(size, size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
     if not image.save(str(assets / name)):
         raise RuntimeError(f"Could not save {name}")
+if sys.platform == "darwin":
+    iconset = root / "build/Organizer.iconset"
+    iconset.mkdir(parents=True, exist_ok=True)
+    for size in (16, 32, 128, 256, 512):
+        for scale in (1, 2):
+            suffix = "@2x" if scale == 2 else ""
+            image = source.scaled(size * scale, size * scale, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            if not image.save(str(iconset / f"icon_{size}x{size}{suffix}.png")):
+                raise RuntimeError("Could not create macOS icon")
+    subprocess.run(["iconutil", "-c", "icns", str(iconset), "-o", str(assets / "Organizer.icns")], check=True)
 licenses = root / "licenses"
 licenses.mkdir(exist_ok=True)
 for name in ["PySide6", "PySide6_Essentials", "shiboken6", "pyinstaller", "winrt-runtime",
              "winrt-Windows.ApplicationModel", "winrt-Windows.Foundation", "typing_extensions"]:
-    distribution = importlib.metadata.distribution(name)
+    if name.startswith("winrt") and sys.platform != "win32":
+        continue
+    try:
+        distribution = importlib.metadata.distribution(name)
+    except importlib.metadata.PackageNotFoundError:
+        if name == "typing_extensions" and sys.platform != "win32":
+            continue
+        raise
     for file in distribution.files or []:
         if "license" in str(file).lower() or Path(str(file)).name.lower() == "copying.txt":
             source = Path(distribution.locate_file(file))
@@ -30,6 +48,7 @@ for name in ["PySide6", "PySide6_Essentials", "shiboken6", "pyinstaller", "winrt
                 target = licenses / name / Path(str(file)).name
                 target.parent.mkdir(exist_ok=True)
                 shutil.copy2(source, target)
-python_license = Path(sys.base_prefix) / "LICENSE.txt"
-if python_license.exists():
-    shutil.copy2(python_license, licenses / "Python-LICENSE.txt")
+for python_license in [Path(sys.base_prefix) / "LICENSE.txt", Path(sys.base_prefix) / "LICENSE"]:
+    if python_license.exists():
+        shutil.copy2(python_license, licenses / "Python-LICENSE.txt")
+        break

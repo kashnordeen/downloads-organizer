@@ -1,50 +1,105 @@
-# Windows build guide
+# Build and install
 
-Use a supported Python 3.12–3.14 environment on Windows. The validated build uses Python 3.14.7, PySide6 6.11.2, PyWinRT 3.2.1, PyInstaller 6.22.3, and Microsoft SDK build tools 10.0.28000.2705.
+Public builds use Python 3.14.7, PySide6/Qt 6.11.2, PyWinRT 3.2.1 on Windows,
+and PyInstaller 6.22.3. Build on each target OS; PyInstaller does not cross-compile.
+The [desktop workflow](../.github/workflows/build.yml) records the complete build.
 
-## Portable bundle
+## Download and install
 
-From the repository root:
+Choose your OS and CPU at [GitHub releases](https://github.com/kashnordeen/downloads-organizer/releases).
+Python is included; there is no account or server to configure.
 
-```powershell
-py -m venv .venv
-.venv\Scripts\python.exe -m pip install -e .
-.venv\Scripts\python.exe -m pip install -r packaging/build-requirements.txt
-.venv\Scripts\python.exe packaging/prepare_assets.py
-.\packaging\windows\build.ps1 -Python .venv\Scripts\python.exe -Output .\dist
+- **Windows:** run the `windows-x64-setup.exe` installer. It installs for the current
+  user without requesting administrator access. Alternatively extract the portable
+  ZIP and keep its whole folder together.
+- **macOS:** open the DMG and drag **Downloads Organizer.app** to Applications
+  (or your user Applications folder). Eject the disk image before launching.
+  Choose `arm64` for Apple Silicon and `x64` for Intel. Preview builds are ad-hoc
+  signed for execution, but lack Developer ID signing and Apple notarization.
+  Gatekeeper or managed-device policies may block them. Follow Apple's normal
+  guidance for software you trust; do not disable Gatekeeper.
+- **Linux:** install the `.deb` with your distribution's package installer or
+  `sudo apt install ./DownloadsOrganizer-0.2.0-linux-x64.deb` on Ubuntu/Debian.
+  Or extract the portable tar.gz and run `DownloadsOrganizer/DownloadsOrganizer`.
+  The portable build still needs the native display libraries listed in the workflow.
+  Builds target glibc 2.34 or newer; the build/test runner uses Ubuntu 22.04.
+
+Windows binaries are unsigned. SmartScreen/antivirus reputation checks may show
+a warning or block them. A passing scanner result does not guarantee acceptance
+on every PC. macOS trusted distribution requires Developer ID signing and
+notarization; Windows trusted distribution requires a release signing identity.
+Neither identity is supplied by this repository. Verify release SHA-256 checksums
+and download from the project's release page.
+
+On first launch, confirm a folder, review starter rules, and preview before moving.
+Automatic sorting is off until you enable it. Grant access to the selected folder
+through normal OS privacy prompts when required.
+
+## Upgrades and uninstall
+
+Quit the app before upgrading. Windows Setup installs over the same stable path
+and leaves per-user settings/history intact. On macOS, replace the app in the same
+location. Linux package upgrades replace `/opt/downloads-organizer`; per-user
+settings/history stay separate. Uninstalling these packages does not delete
+organized files or the app's per-user settings/history.
+
+Disable **Start at login** before uninstalling, or before moving a portable app.
+For portable upgrades, extract the replacement into its final location, then
+enable startup again. No startup entry is created by an installer; it is an
+explicit app setting. Keep backup copies of important files and settings.
+
+## Reproduce a build
+
+Create a virtual environment, activate it, then run:
+
+```sh
+python -m pip install -e . -r packaging/runtime-requirements.txt -r packaging/build-requirements.txt
+python -m unittest discover -s tests -v
+python packaging/sources.py
 ```
 
-Extract the generated ZIP, keep the complete `DownloadsOrganizer` folder together, and run `DownloadsOrganizer.exe`. Python is included. The executable is unsigned; Windows reputation checks may show a warning. No SmartScreen acceptance claim is made.
-
-The build embeds `asInvoker`, dynamically bundles the native runtime, and uses Windows' ICU rather than incompatible external ICU copies. It temporarily narrows PATH to avoid DLLs exported by other development tools. It does not install anything, change security settings, or create a signing certificate.
-
-### Portable upgrades
-
-Disable **Start at login** before moving/removing the old portable folder, then quit the app. Extract the new version into a separate folder and enable startup again from that location. Per-user settings/history remain outside the portable folder. Removing the bundle does not erase organized files or settings.
-
-## Unsigned MSIX
-
-Install the Microsoft Windows SDK build tools, then provide MakeAppx:
+This downloads version-matched upstream sources, verifies their published checksums,
+and copies notices. On **Windows**, install the official Inno Setup compiler and run:
 
 ```powershell
-.\packaging\windows\build.ps1 -Python .venv\Scripts\python.exe `
-  -MakeAppx 'C:\path\to\WindowsSDK\x64\makeappx.exe' -Output .\dist
+python packaging/build.py 'C:\path\to\InnoSetup\ISCC.exe'
 ```
 
-The output is an **unsigned packaging artifact**, not a trusted installer. The placeholder publisher is `CN=LocalOrganizer`; rebuild with `-Publisher` matching the exact subject of a release certificate. Sign with SHA-256 using SignTool, verify the signature, and test installation, activation, login startup, upgrade, uninstall, and data retention. Keep private keys and passwords outside the repository.
+On **macOS** or **Linux**:
 
-MSIX startup is disabled by default. The app uses Windows StartupTask APIs and honors user/policy disablement. Startup launches with `--background`, which hides the window only when tray mode is enabled and a tray is available. Package-managed data may be removed on uninstall; back up settings/history before uninstalling when needed.
-
-Official references: [MSIX manual packaging](https://learn.microsoft.com/en-us/windows/msix/package/manual-packaging-root), [SignTool signing](https://learn.microsoft.com/en-us/windows/msix/package/sign-app-package-using-signtool), [Windows startup tasks](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.startuptask), and [PyInstaller](https://pyinstaller.org/en/stable/usage.html).
-
-## Verify a bundle
-
-Use an existing writable report directory:
-
-```powershell
-.\DownloadsOrganizer.exe --verify-bundle C:\existing\folder\bundle-check.json
+```sh
+python packaging/build.py
 ```
 
-This explicit check uses isolated temporary files under the report directory, writes a report and screenshot, then exits. It covers native UI, navigation, icons, preview, move, undo, tray controls, locking, automatic sorting, stopped-period catch-up, the frozen startup command, and WinRT imports. It does not organize your Downloads or change your startup registration.
+Linux requires `dpkg-deb` and the display libraries in the workflow. macOS uses
+native `iconutil`, `hdiutil`, and `codesign`. Windows Setup uses
+`PrivilegesRequired=lowest`, and the executable embeds Microsoft's `asInvoker`
+manifest. Bundles keep Qt libraries replaceable and include dependency notices.
+See [source/replacement instructions](DEPENDENCIES.md).
 
-Clean-machine, Windows 10, signed-install, and macOS/Linux binary verification remain pending. Keep license notices with bundles and complete the public binary redistribution review described in [THIRD_PARTY.md](../THIRD_PARTY.md).
+Outputs are in `dist/release/`, with platform checksums. Publish the corresponding
+source archive with binaries; keep the per-platform validation reports with each
+release. The unsigned MSIX builder in `packaging/windows/build.ps1` remains available
+for signing experiments, but MSIX is not the public preview installation route.
+
+## Verify the built app
+
+```sh
+DownloadsOrganizer --verify-bundle /existing/writable/folder/bundle-check.json
+```
+
+Use `.exe` on Windows or `Contents/MacOS/DownloadsOrganizer` inside the macOS app.
+This explicit check uses isolated temporary files, writes a report and screenshot,
+and exits. It checks preview, moves, undo, navigation, icons, locking, automatic
+sorting, catch-up after stopping, and frozen startup commands. Tray actions are
+tested when a system tray is available. It does not organize your Downloads or
+change your login startup registration.
+
+CI runs Qt offscreen. Real desktop tray/login/reboot behavior, OS security prompts,
+earlier OS versions, and signed installs need separate manual testing.
+
+Official references: [PyInstaller](https://pyinstaller.org/en/stable/usage.html),
+[per-user Inno Setup](https://jrsoftware.org/ishelp/topic_setup_privilegesrequired.htm),
+[Microsoft app manifests](https://learn.microsoft.com/en-us/windows/win32/sbscs/application-manifests),
+and [Apple opening guidance](https://support.apple.com/en-us/102445).
+

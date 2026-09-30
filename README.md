@@ -8,13 +8,13 @@
 
 Preview file moves, build your own rules, and let a local desktop app handle the routine sorting—with history and safe undo.
 
-![Version](https://img.shields.io/badge/version-0.1.1-2457d6?style=flat-square)
+![Version](https://img.shields.io/badge/version-0.2.0_preview-2457d6?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.12%E2%80%933.14-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Qt](https://img.shields.io/badge/Qt-6.11.2-41CD52?style=flat-square&logo=qt&logoColor=white)
 [![MIT license](https://img.shields.io/badge/license-MIT-2457d6?style=flat-square)](LICENSE)
 ![Local](https://img.shields.io/badge/files-stay_local-2457d6?style=flat-square)
 
-[Get started](#get-started) · [How it works](#daily-use) · [Build for Windows](docs/BUILDING.md) · [Validation](VALIDATION.md)
+[Download preview](https://github.com/kashnordeen/downloads-organizer/releases/tag/v0.2.0-preview) · [How it works](#daily-use) · [Build and install](docs/BUILDING.md) · [Validation](VALIDATION.md)
 
 <img src="docs/media/workspace-tour.gif" width="1000" alt="Animated tour of the real Downloads Organizer: preview demo downloads, edit rules, review move history, and open settings">
 
@@ -27,25 +27,33 @@ Preview file moves, build your own rules, and let a local desktop app handle the
 | Capability | What you control |
 | :--- | :--- |
 | **Preview first** | See destinations and skipped reasons before confirming a manual move. |
-| **Rules that make sense** | Match extensions and filename text. The first enabled rule wins. |
+| **Rules that make sense** | Add or edit rules with a guided form and folder picker. The first enabled rule wins. |
+| **First-launch guidance** | Confirm a folder and review starter rules. Automatic sorting starts off. |
 | **Automatic catch-up** | On reopening, ready files downloaded while stopped are processed before later ready arrivals. |
 | **Background sorting** | Keep the app in the system tray; optionally start it at login. |
 | **History and undo** | Review moves and restore unchanged files when the original path is free. |
 | **A focused workspace** | Separate Preview, Rules, History, and Settings pages, with blue light/dark themes. |
 
-No account, cloud service, telemetry, or administrator privileges are required for normal operation.
+No account, cloud service, telemetry, or administrator privileges are required for normal operation. Python is included in the downloads.
 
 ## Platform status
 
 | Platform | Current status |
 | :--- | :--- |
-| **Windows x64** | Source and portable bundle tested on Windows 11. Intended minimum is Windows 10 version 2004; Windows 10 and clean-machine tests remain pending. |
-| **macOS** | Source support implemented; runtime, login startup, and packaging remain unverified. |
-| **Linux** | Source support implemented; runtime, desktop integration, and packaging remain unverified. Qt display libraries are required. |
+| **Windows x64** | Per-user Setup installer and portable ZIP. CI tests on Windows Server 2022; local source UI tested on Windows 11. Intended minimum: Windows 10 version 2004. |
+| **macOS Intel / Apple Silicon** | Separate x64 and arm64 DMGs with app bundles. CI tests on macOS 15. |
+| **Linux x64** | Debian/Ubuntu package and portable tar.gz. CI tests on Ubuntu 22.04; native display libraries and glibc 2.34+ required. |
 
-Version **0.1.1** is a development preview. Windows executable/MSIX builds are unsigned. Trusted installation and package-managed login startup still require a signing identity and installation testing. This repository contains source and documentation; compiled installers are not published here.
+Version **0.2.0** is a public preview. Windows builds are unsigned; macOS builds are ad-hoc signed but lack Developer ID signing and notarization. OS security policies may warn or block installation. Earlier OS versions, real desktop tray/login/reboot behavior on macOS/Linux, and signed installation remain manual validation tasks. See [installation guidance](docs/BUILDING.md).
 
 ## Get started
+
+[Download the preview for your OS](https://github.com/kashnordeen/downloads-organizer/releases/tag/v0.2.0-preview), install it, and open **Downloads Organizer**. Confirm the folder on first launch, review Rules, and refresh Preview. Nothing moves until you confirm a manual move or enable automatic sorting.
+
+Windows Setup creates a Start-menu shortcut. On macOS, drag the app from the DMG to Applications before launching. On Ubuntu/Debian, install the `.deb` with the package installer. Portable downloads are also available for Windows/Linux. [Full instructions and upgrades](docs/BUILDING.md).
+
+<details>
+<summary><strong>Run from source (developers)</strong></summary>
 
 Install **Python 3.12–3.14** and Git, then clone the repository.
 
@@ -60,7 +68,7 @@ py -m venv .venv
 ```
 
 <details>
-<summary><strong>macOS / Linux source setup (experimental)</strong></summary>
+<summary><strong>macOS / Linux source setup</strong></summary>
 
 ```bash
 git clone https://github.com/kashnordeen/downloads-organizer.git
@@ -74,12 +82,12 @@ Use a supported Python version. On Linux, install the display libraries required
 
 </details>
 
-For Windows bundling, unsigned MSIX generation, portable upgrades, and signing requirements, see [the build guide](docs/BUILDING.md).
+</details>
 
 ## Daily use
 
 1. **Choose a folder.** The default rules suggest category subfolders.
-2. **Review Rules.** Edit extension lists, optional filename text, and absolute destinations. Reorder rules to set priority, then save.
+2. **Review Rules.** Use Add rule or Edit selected for a guided form. Choose extensions, filename text, and a destination. Reorder rules to set priority, then save.
 3. **Refresh Preview.** Inspect every proposed destination and skipped reason.
 4. **Organize files.** Confirm the manual move, or enable automatic sorting after reviewing your rules.
 5. **Review History.** Select a completed move to undo when needed.
@@ -136,7 +144,7 @@ python -m unittest discover -s tests -v
 python -m compileall -q organizer
 ```
 
-**26 tests** passed in the Windows development environment. They cover rule priority, exclusions, collisions, stale/changed files, recovery, undo, monitoring, stopped-period catch-up, navigation, tray behavior, and startup policy handling. Tests use temporary files and offscreen Qt windows. See [validation details and remaining gates](VALIDATION.md).
+**28 tests** cover rule priority, exclusions, collisions, stale/changed files, recovery, undo, monitoring, stopped-period catch-up, navigation, tray behavior, startup policy handling, first-launch consent, saved settings, and rule-form validation. They passed locally on Windows; the [desktop workflow](.github/workflows/build.yml) runs them and bundled runtime checks on all release targets. Tests use temporary files and offscreen Qt windows. See [validation details and remaining gates](VALIDATION.md).
 
 Runtime dependencies are pinned in [`pyproject.toml`](pyproject.toml); build pins are in [`packaging/build-requirements.txt`](packaging/build-requirements.txt). Python's standard library supplies filesystem operations, JSON, SQLite, and tests.
 
@@ -144,4 +152,4 @@ For a bug report, include the OS, Python/app version, reproduction steps, and th
 
 ## License
 
-Project code is licensed under [MIT](LICENSE). Dependency licenses remain separate: Qt/PySide/Shiboken use the LGPL v3 option for the included modules; other runtime/build notices are documented in [THIRD_PARTY.md](THIRD_PARTY.md) and [`licenses/`](licenses/). Complete the corresponding-source and Qt attribution review before distributing compiled bundles publicly.
+Project code is licensed under [MIT](LICENSE). Dependencies retain their separate licenses. Qt/PySide/Shiboken use the LGPL v3 option; bundles include license texts and upstream attribution files. Releases supply corresponding source archives with checksums and [replacement/build instructions](docs/DEPENDENCIES.md). See [THIRD_PARTY.md](THIRD_PARTY.md).
