@@ -1,12 +1,32 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt
+from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal
 from PySide6.QtWidgets import (QApplication, QCheckBox, QFileDialog, QHeaderView,
     QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton,
     QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
 from .core import Rule, defaults, load_settings, preview, save_settings
+from .moves import Journal
+
+
+class MoveWorker(QThread):
+    report = Signal(str)
+
+    def __init__(self, data_dir, proposals, parent):
+        super().__init__(parent)
+        self.data_dir, self.proposals = data_dir, proposals
+
+    def run(self):
+        with Journal(self.data_dir / "history.db") as journal:
+            for proposal in self.proposals:
+                if self.isInterruptionRequested():
+                    break
+                try:
+                    destination = journal.move(proposal)
+                    self.report.emit(f"Moved {proposal.source.name} → {destination}")
+                except (OSError, ValueError) as error:
+                    self.report.emit(f"Skipped {proposal.source.name}: {error}")
 
 
 class Window(QMainWindow):
@@ -18,6 +38,7 @@ class Window(QMainWindow):
         self.settings_path = self.data_dir / "settings.json"
         self.folder = None
         self.proposals = []
+        self.worker = None
         body = QWidget()
         self.setCentralWidget(body)
         layout = QVBoxLayout(body)
@@ -50,6 +71,10 @@ class Window(QMainWindow):
         self.files.setEditTriggers(QTableWidget.NoEditTriggers)
         self.files.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         layout.addWidget(self.files)
+        self.organize = QPushButton("Organize previewed files")
+        self.organize.setEnabled(False)
+        self.organize.clicked.connect(self.execute)
+        layout.addWidget(self.organize)
         self.status = QLabel("Manual mode. Preview never moves files.")
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -59,6 +84,36 @@ class Window(QMainWindow):
                 self.set_folder(folder, rules)
             except ValueError as error:
                 self.status.setText(str(error) + " Original settings were preserved.")
+        self.rules.itemChanged.connect(self.invalidate)
+
+    def invalidate(self):
+        self.proposals = []
+        self.organize.setEnabled(False)
+
+    def execute(self):
+        proposals = [p for p in self.proposals if p.destination is not None]
+        if not proposals:
+            return
+        answer = QMessageBox.question(self, "Organize files", f"Move {len(proposals)} previewed files?\nExisting files will never be overwritten.")
+        if answer != QMessageBox.Yes:
+            return
+        self.setEnabled(False)
+        self.worker = MoveWorker(self.data_dir, proposals, self)
+        self.worker.report.connect(self.status.setText)
+        self.worker.finished.connect(self.finished)
+        self.worker.start()
+
+    def finished(self):
+        self.setEnabled(True)
+        self.invalidate()
+
+    def closeEvent(self, event):
+        if self.worker is not None and self.worker.isRunning():
+            self.worker.requestInterruption()
+            self.status.setText("Finishing the current file safely. Close again when finished.")
+            event.ignore()
+        else:
+            event.accept()
 
     def add_rule(self, rule):
         row = self.rules.rowCount()
@@ -90,6 +145,7 @@ class Window(QMainWindow):
             self.add_rule(rule)
         self.files.setRowCount(0)
         self.proposals = []
+        self.organize.setEnabled(False)
 
     def choose_folder(self):
         folder = QFileDialog.getExistingDirectory(self, "Choose folder to organize")
@@ -134,9 +190,11 @@ class Window(QMainWindow):
                     self.files.setItem(row, col, QTableWidgetItem(text))
             count = sum(p.destination is not None for p in self.proposals)
             self.status.setText(f"{count} files match your rules. No files were moved.")
+            self.organize.setEnabled(count > 0)
         except (ValueError, OSError) as error:
             self.proposals = []
             self.files.setRowCount(0)
+            self.organize.setEnabled(False)
             self.status.setText(str(error))
 
 

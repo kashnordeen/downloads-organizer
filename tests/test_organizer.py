@@ -1,9 +1,12 @@
 import json
 import tempfile
+import os
+import time
 import unittest
 from pathlib import Path
 
 from organizer.core import Rule, preview, load_settings, save_settings
+from organizer.moves import Journal
 
 
 class OrganizerTests(unittest.TestCase):
@@ -48,6 +51,32 @@ class OrganizerTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             load_settings(path)
         self.assertEqual(path.read_bytes(), before)
+
+    def ready_proposal(self):
+        source = self.downloads / "sample.pdf"
+        source.write_bytes(b"important data")
+        os.utime(source, (time.time() - 10, time.time() - 10))
+        return preview(self.downloads, [Rule("PDF", ["pdf"], "", str(self.root / "PDF"))])[0]
+
+    def test_move_preserves_collision_and_records_history(self):
+        proposal = self.ready_proposal()
+        proposal.destination.parent.mkdir()
+        proposal.destination.write_bytes(b"existing")
+        with Journal(self.root / "history.db") as journal:
+            actual = journal.move(proposal)
+            self.assertEqual(actual.name, "sample (1).pdf")
+            self.assertEqual(actual.read_bytes(), b"important data")
+            self.assertEqual(proposal.destination.read_bytes(), b"existing")
+            self.assertFalse(proposal.source.exists())
+            self.assertEqual(journal.history()[0][3], "complete")
+
+    def test_changed_or_new_download_is_not_moved(self):
+        proposal = self.ready_proposal()
+        proposal.source.write_bytes(b"changed")
+        with Journal(self.root / "history.db") as journal:
+            with self.assertRaises(ValueError):
+                journal.move(proposal)
+            self.assertEqual(proposal.source.read_bytes(), b"changed")
 
 
 if __name__ == "__main__":
