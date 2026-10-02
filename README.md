@@ -150,6 +150,13 @@ Runtime dependencies are pinned in [`pyproject.toml`](pyproject.toml); build pin
 
 For a bug report, include the OS, Python/app version, reproduction steps, and the displayed error. Use sample files and redact personal paths. Test rule changes against temporary folders before contributing changes that move files.
 
+## Code signing policy
+
+Windows preview downloads are currently unsigned. We are preparing for SignPath
+Foundation review; approval and signing integration are pending. See our
+[Code signing policy](docs/SIGNING.md) for release responsibilities, privacy,
+and the remaining activation steps.
+
 ## License
 
 Project code is licensed under [MIT](LICENSE). Dependencies retain their separate licenses. Qt/PySide/Shiboken use the LGPL v3 option; bundles include license texts and upstream attribution files. Releases supply corresponding source archives with checksums and [replacement/build instructions](docs/DEPENDENCIES.md). See [THIRD_PARTY.md](THIRD_PARTY.md).
