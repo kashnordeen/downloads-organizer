@@ -14,12 +14,12 @@ Python is included; there is no account or server to configure.
   ZIP and keep its whole folder together.
 - **macOS:** open the DMG and drag **Downloads Organizer.app** to Applications
   (or your user Applications folder). Eject the disk image before launching.
-  Choose `arm64` for Apple Silicon and `x64` for Intel. Preview builds are ad-hoc
+  Choose `arm64` for Apple Silicon and `x64` for Intel. Builds are ad-hoc
   signed for execution, but lack Developer ID signing and Apple notarization.
   Gatekeeper or managed-device policies may block them. Follow Apple's normal
   guidance for software you trust; do not disable Gatekeeper.
 - **Linux:** install the `.deb` with your distribution's package installer or
-  `sudo apt install ./DownloadsOrganizer-0.2.0-linux-x64.deb` on Ubuntu/Debian.
+  `sudo apt install ./DownloadsOrganizer-1.0.0-linux-x64.deb` on Ubuntu/Debian.
   Or extract the portable tar.gz and run `DownloadsOrganizer/DownloadsOrganizer`.
   The portable build still needs the native display libraries listed in the workflow.
   Native system libraries remain managed by the distribution; the `.deb` declares
@@ -33,7 +33,7 @@ notarization; Windows trusted distribution requires a release signing identity.
 Neither identity is supplied by this repository. Verify release SHA-256 checksums
 and download from the project's release page.
 
-On first launch, confirm a folder, review starter rules, and preview before moving.
+On first launch, confirm a folder and follow the guided tour, then preview before moving.
 Automatic sorting is off until you enable it. Grant access to the selected folder
 through normal OS privacy prompts when required.
 
@@ -82,7 +82,7 @@ See [source/replacement instructions](DEPENDENCIES.md).
 Outputs are in `dist/release/`, with platform checksums. Publish the corresponding
 source archive with binaries; keep the per-platform validation reports with each
 release. The unsigned MSIX builder in `packaging/windows/build.ps1` remains available
-for signing experiments, but MSIX is not the public preview installation route.
+for signing experiments, but MSIX is not the public installation route.
 
 ## Verify the built app
 

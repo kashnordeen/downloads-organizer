@@ -9,7 +9,7 @@ from .core import Rule, defaults, load_settings, load_options, preview, save_set
 from .moves import Journal
 from .worker import MonitorWorker
 from .startup import set_startup, startup_enabled
-from .ui import build_ui, RuleDialog, initial_folder
+from .ui import build_ui, RuleDialog, initial_folder, guided_tour
 
 
 class MoveWorker(QThread):
@@ -25,6 +25,11 @@ class MoveWorker(QThread):
                 if isinstance(self.proposals, int):
                     restored = journal.undo(self.proposals)
                     self.report.emit(f"Restored {restored}")
+                    return
+                if isinstance(self.proposals, tuple):
+                    operation, choice = self.proposals
+                    result = journal.resolve_review(operation, choice)
+                    self.report.emit(f"{'Moved to destination' if choice == 'move' else 'Left in Downloads'}: {result}")
                     return
                 for proposal in self.proposals:
                     if self.isInterruptionRequested():
@@ -49,6 +54,7 @@ class Window(QMainWindow):
         self.worker = None
         self.monitor = None
         self.quitting = False
+        self.tour_done = False
         self.watcher = QFileSystemWatcher(self)
         self.watcher.directoryChanged.connect(self.wake_monitor)
         build_ui(self)
@@ -68,6 +74,7 @@ class Window(QMainWindow):
                 folder, rules = load_settings(self.settings_path)
                 self.set_folder(folder, rules)
                 options = load_options(self.settings_path)
+                self.tour_done = options.get("tour_done", False)
                 self.automatic.setChecked(options.get("automatic", False))
                 self.tray_mode.setChecked(options.get("tray", False))
             except ValueError as error:
@@ -124,14 +131,15 @@ class Window(QMainWindow):
             self.set_folder(folder)
             self.save()
             self.show_page(1)
+            self.show_tour()
 
     def show_help(self):
-        QMessageBox.information(self, "Getting started",
-            "1. Choose the folder to organize.\n2. Review starter rules or add your own.\n"
-            "3. Save rules and refresh Preview.\n4. Organize the previewed files.\n\n"
-            "Automatic sorting is optional. Editing rules pauses it. History lets you undo completed moves.\n\n"
-            "Keep the installed app in its final location before enabling Start at login. "
-            "Allow access to your chosen folder in your operating system's privacy settings when prompted.")
+        self.show_tour()
+
+    def show_tour(self):
+        guided_tour(self)
+        self.tour_done = True
+        self.save()
 
     def toggle_login(self, enabled):
         self.login_start.setEnabled(False)
@@ -198,7 +206,8 @@ class Window(QMainWindow):
         self.status.setText(message)
 
     def options(self):
-        return {"automatic": self.automatic.isChecked(), "tray": self.tray_mode.isChecked()}
+        return {"automatic": self.automatic.isChecked(), "tray": self.tray_mode.isChecked(),
+                "tour_done": self.tour_done}
 
     def load_history(self, recover=False):
         try:
@@ -213,11 +222,33 @@ class Window(QMainWindow):
                     item.setToolTip(str(value or ""))
                     self.history_table.setItem(row, col, item)
             if recover and any(row[3] == "review" for row in history):
-                self.status.setText("Some interrupted moves need review. Copies have been retained; inspect History.")
+                self.status.setText("Some moves need review. Select one in History to move or leave in Downloads.")
         except Exception as error:
             self.organize.setEnabled(False)
             self.status.setText(f"History unavailable: {error}")
         self.update_ui()
+        self.update_history_actions()
+
+    def update_history_actions(self):
+        row = self.history_table.currentRow()
+        state = self.history_table.item(row, 3).text() if row >= 0 and self.history_table.item(row, 3) else ""
+        self.undo_button.setEnabled(state == "complete")
+        self.review_move.setEnabled(state == "review")
+        self.review_keep.setEnabled(state == "review")
+
+    def resolve_review(self, choice):
+        row = self.history_table.currentRow()
+        if row < 0 or self.history_table.item(row, 3).text() != "review":
+            self.status.setText("Select a move marked review in History first.")
+            return
+        source = self.history_table.item(row, 1).text()
+        target = self.history_table.item(row, 2).text()
+        action = "move it to the recorded destination" if choice == "move" else "leave it in Downloads"
+        answer = QMessageBox.question(self, "Resolve reviewed file",
+            f"Original: {source}\nDestination: {target}\n\n{action.capitalize()}? "
+            "The app will verify any existing copy and stop if a file has changed.")
+        if answer == QMessageBox.Yes:
+            self.start_worker((int(self.history_table.item(row, 0).text()), choice))
 
     def undo(self):
         row = self.history_table.currentRow()
@@ -384,6 +415,15 @@ class Window(QMainWindow):
     def refresh(self):
         try:
             self.proposals = preview(self.folder, self.read_rules())
+            with Journal(self.data_dir / "history.db") as journal:
+                journal.recover()
+                kept = journal.kept_sources()
+                blocked = journal.unresolved_sources()
+            for proposal in self.proposals:
+                if kept.get(str(proposal.source)) == proposal.signature:
+                    proposal.destination, proposal.reason = None, "Left in Downloads after review"
+                elif str(proposal.source) in blocked:
+                    proposal.destination, proposal.reason = None, "Needs review in History"
             self.files.setRowCount(len(self.proposals))
             for row, proposal in enumerate(self.proposals):
                 destination = str(proposal.destination or "—")

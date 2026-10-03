@@ -1,5 +1,16 @@
 # Validation record
 
+## 1.0.0 stable release
+
+The Windows source test suite passed on 2026-10-03: 34 tests, one Windows
+symlink-privilege skip. It covers review choices, keeping a file in Downloads,
+the guided tour, and clicking **Organize files** in Preview after confirmation.
+Cross-platform package and installation results will be linked here after the
+1.0.0 desktop build finishes. Packages remain unsigned as described in
+[code signing policy](docs/SIGNING.md).
+
+## 0.2.0 preview history
+
 Version **0.2.0 public preview**, checked **2026-10-01**. Build source:
 `0f5945de01c827ad898a51820c280dafcffc811d`.
 [Final desktop build](https://github.com/kashnordeen/downloads-organizer/actions/runs/36824119673)

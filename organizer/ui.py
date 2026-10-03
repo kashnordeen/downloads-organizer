@@ -91,6 +91,57 @@ def initial_folder(window, suggestion):
     return folder.text() if dialog.exec() == QDialog.Accepted else None
 
 
+def guided_tour(window):
+    steps = [
+        (1, "Make your rules", "Starter rules sort common file types into category folders. Add or edit a rule, choose its destination, then save. Rules run top to bottom; the first match wins."),
+        (0, "Preview before moving", "Refresh Preview to see each file, its destination, and any skipped reason. Organize files asks for confirmation and never overwrites an existing file."),
+        (2, "Review and undo", "History records completed moves. Select one and choose Undo selected move to restore it. For a move marked review, choose Move to destination or Leave in Downloads."),
+        (3, "Set up your app", "Settings lets you keep the app in the tray, start at login, replay this tour, or quit. Closing the window stops sorting unless tray mode is enabled."),
+        (0, "Choose automatic mode", "Automatic sorting is optional and starts off. Turn it on only after checking your rules. On restart, the app checks files downloaded while it was stopped."),
+    ]
+    dialog = QDialog(window)
+    dialog.setWindowTitle("Welcome · Downloads Organizer")
+    dialog.setMinimumWidth(520)
+    layout = QVBoxLayout(dialog)
+    progress = QLabel()
+    progress.setProperty("muted", True)
+    title = QLabel()
+    title.setObjectName("pageTitle")
+    explanation = QLabel()
+    explanation.setWordWrap(True)
+    explanation.setMinimumHeight(100)
+    layout.addWidget(progress)
+    layout.addWidget(title)
+    layout.addWidget(explanation)
+    controls = QHBoxLayout()
+    previous = button("Back", lambda: show_step(position[0] - 1))
+    skip = button("Skip tour", dialog.accept)
+    next_step = button("Next", lambda: show_step(position[0] + 1))
+    controls.addWidget(previous)
+    controls.addStretch()
+    controls.addWidget(skip)
+    controls.addWidget(next_step)
+    layout.addLayout(controls)
+    position = [0]
+
+    def show_step(index):
+        if index == len(steps):
+            dialog.accept()
+            return
+        position[0] = index
+        page, heading, body = steps[index]
+        window.show_page(page)
+        progress.setText(f"STEP {index + 1} OF {len(steps)}")
+        title.setText(heading)
+        explanation.setText(body)
+        previous.setEnabled(index > 0)
+        next_step.setText("Finish tour" if index == len(steps) - 1 else "Next")
+
+    show_step(0)
+    dialog.exec()
+    window.show_page(0)
+
+
 def button(text, callback, primary=False):
     control = QPushButton(text)
     control.setProperty("primary", primary)
@@ -315,9 +366,14 @@ def build_ui(window):
     history.addWidget(window.history_empty, 1)
     history_actions = QHBoxLayout()
     history_actions.addStretch()
+    window.review_move = button("Move to destination", lambda: window.resolve_review("move"))
+    window.review_keep = button("Leave in Downloads", lambda: window.resolve_review("keep"))
+    history_actions.addWidget(window.review_move)
+    history_actions.addWidget(window.review_keep)
     window.undo_button = button("Undo selected move", window.undo)
     history_actions.addWidget(window.undo_button)
     history.addLayout(history_actions)
+    window.history_table.itemSelectionChanged.connect(window.update_history_actions)
 
     settings = window.pages.widget(3).layout()
     window.tray_mode = QCheckBox("Keep running in the tray when the window closes")
@@ -339,7 +395,7 @@ def build_ui(window):
     about.setWordWrap(True)
     about.setTextInteractionFlags(Qt.TextSelectableByMouse)
     settings.addWidget(about)
-    settings.addWidget(button("Getting started", window.show_help))
+    settings.addWidget(button("Replay guided tour", window.show_help))
     settings.addStretch()
     quit_row = QHBoxLayout()
     quit_row.addWidget(button("Quit app", window.request_quit))

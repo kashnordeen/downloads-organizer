@@ -7,7 +7,7 @@
 [Setup]
 AppId={{D38A3E38-621E-43B7-8F13-437B49A7903D}
 AppName=Downloads Organizer
-AppVersion=0.2.0
+AppVersion=1.0.0
 AppPublisher=kashnordeen
 AppPublisherURL=https://github.com/kashnordeen/downloads-organizer
 DefaultDirName={localappdata}\Programs\DownloadsOrganizer
@@ -16,7 +16,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.19041
 OutputDir={#OutputDir}
-OutputBaseFilename=DownloadsOrganizer-0.2.0-windows-x64-setup
+OutputBaseFilename=DownloadsOrganizer-1.0.0-windows-x64-setup
 SetupIconFile=Assets\Organizer.ico
 LicenseFile=..\..\LICENSE
 Compression=lzma2

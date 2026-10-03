@@ -53,10 +53,12 @@ class MonitorWorker(QThread):
                     proposals = preview(self.folder, self.rules)
                     ready = self.pending.scan(proposals, time.monotonic())
                     blocked = journal.unresolved_sources()
+                    kept = journal.kept_sources()
                     for proposal in ready:
                         if self.isInterruptionRequested():
                             break
-                        if str(proposal.source) in blocked or failed.get(proposal.source) == proposal.signature:
+                        if (str(proposal.source) in blocked or kept.get(str(proposal.source)) == proposal.signature
+                                or failed.get(proposal.source) == proposal.signature):
                             continue
                         try:
                             destination = journal.move(proposal)
