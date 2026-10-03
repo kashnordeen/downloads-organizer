@@ -244,9 +244,12 @@ class Window(QMainWindow):
         source = self.history_table.item(row, 1).text()
         target = self.history_table.item(row, 2).text()
         action = "move it to the recorded destination" if choice == "move" else "leave it in Downloads"
+        consequence = ("The original will be removed after its destination copy is verified."
+                       if choice == "move" else
+                       "The original stays; any verified destination copy will be removed.")
         answer = QMessageBox.question(self, "Resolve reviewed file",
-            f"Original: {source}\nDestination: {target}\n\n{action.capitalize()}? "
-            "The app will verify any existing copy and stop if a file has changed.")
+            f"Original: {source}\nDestination: {target}\n\n{action.capitalize()}?\n"
+            f"{consequence} The app stops if a file has changed.")
         if answer == QMessageBox.Yes:
             self.start_worker((int(self.history_table.item(row, 0).text()), choice))
 
