@@ -2,12 +2,21 @@
 
 ## 1.0.0 stable release
 
-The Windows source test suite passed on 2026-10-03: 35 tests, one Windows
-symlink-privilege skip. It covers review choices, keeping a file in Downloads,
-the guided tour, and clicking **Organize files** in Preview after confirmation.
-Cross-platform package and installation results will be linked here after the
-1.0.0 desktop build finishes. Packages remain unsigned as described in
-[code signing policy](docs/SIGNING.md).
+Version **1.0.0**, checked **2026-10-03**, was built from merged commit
+`6e5db7e97d6a4d2ba8c505d2d12655a8c8ed7edd`. The
+[desktop build](https://github.com/kashnordeen/downloads-organizer/actions/runs/37108313059)
+passed on Windows x64, macOS Intel, macOS Apple Silicon, and Linux x64. The
+Apple Silicon DMG creation hit a runner `hdiutil` resource-busy error on the
+first attempt; a retry passed all package and bundled-runtime checks.
+
+The Windows source suite ran 35 tests: 34 passed and one Windows
+symlink-privilege test was skipped. It covers review choices, keeping a file
+in Downloads, the guided tour, and clicking **Organize files** in Preview
+after confirmation, including a retry after an original-only interruption.
+The release's six packages, corresponding source, and combined checksums were
+verified locally and against GitHub's uploaded SHA-256 digests. Windows
+packages remain unsigned; macOS packages are ad-hoc signed but not notarized.
+See the [code signing policy](docs/SIGNING.md).
 
 ## 0.2.0 preview history
 
