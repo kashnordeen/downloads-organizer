@@ -126,7 +126,7 @@ class OrganizerTests(unittest.TestCase):
             self.assertEqual(journal.history()[0][3], "complete")
             self.assertEqual(proposal.destination.read_bytes(), b"important data")
 
-    def test_publication_failure_retains_source_and_recoverable_copy(self):
+    def test_interrupted_move_with_original_only_is_safe_to_retry(self):
         proposal = self.ready_proposal()
         with Journal(self.root / "history.db") as journal:
             with patch("organizer.moves.os.link", side_effect=OSError("Unsupported filesystem")):
@@ -134,11 +134,13 @@ class OrganizerTests(unittest.TestCase):
                     journal.move(proposal)
             journal.recover()
             self.assertEqual(proposal.source.read_bytes(), b"important data")
-            self.assertEqual(journal.history()[0][3], "review")
-            self.assertEqual(next(proposal.destination.parent.glob(".organizer-*.tmp")).read_bytes(), b"important data")
-            with self.assertRaises(ValueError):
-                journal.move(proposal)
-            self.assertEqual(len(journal.history()), 1)
+            self.assertEqual(journal.history()[0][3], "retryable")
+            self.assertIn("original is intact", journal.history()[0][4])
+            self.assertEqual(list(proposal.destination.parent.glob(".organizer-*.tmp")), [])
+            self.assertEqual(journal.move(proposal), proposal.destination)
+            self.assertEqual([row[3] for row in journal.history()], ["complete", "retryable"])
+            self.assertFalse(proposal.source.exists())
+            self.assertEqual(proposal.destination.read_bytes(), b"important data")
 
     def test_source_removal_failure_preserves_both_copies(self):
         proposal = self.ready_proposal()

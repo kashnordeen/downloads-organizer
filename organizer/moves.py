@@ -119,12 +119,22 @@ class Journal:
         return self.move(Proposal(destination, source, "Undo", signature(destination)), undo_of=operation)
 
     def recover(self):
-        rows = self.db.execute("""SELECT id,source,destination,hash,signature,temp,undo_of
+        rows = self.db.execute("""SELECT id,source,destination,hash,signature,temp,undo_of,error
             FROM operations WHERE state IN ('pending','published','review')""").fetchall()
-        for operation, source, destination, expected, saved, temp, undo_of in rows:
+        for operation, source, destination, expected, saved, temp, undo_of, error in rows:
             try:
-                original, target = Path(source), Path(destination)
-                safe_path(target)
+                original, target = safe_path(source), safe_path(destination)
+                if original.is_file() and not target.exists():
+                    if temp:
+                        partial = Path(temp)
+                        if partial.name.startswith(".organizer-") and partial.suffix == ".tmp":
+                            partial = safe_path(partial)
+                            if partial.parent == target.parent and partial.is_file():
+                                partial.unlink()
+                    detail = (f"{error or 'Move was interrupted'}; original is intact and "
+                              "destination is absent. Refresh Preview to retry.")
+                    self.update(operation, state="retryable", error=detail)
+                    continue
                 if (not original.exists() and not original.is_symlink() and target.is_file()
                         and signature(target)[:4] == tuple(json.loads(saved))[:4] and digest(target) == expected):
                     self.update(operation, state="complete", error="")
