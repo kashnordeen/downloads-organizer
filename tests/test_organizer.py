@@ -126,7 +126,7 @@ class OrganizerTests(unittest.TestCase):
             self.assertEqual(journal.history()[0][3], "complete")
             self.assertEqual(proposal.destination.read_bytes(), b"important data")
 
-    def test_publication_failure_retains_source_and_recoverable_copy(self):
+    def test_interrupted_move_with_original_only_is_safe_to_retry(self):
         proposal = self.ready_proposal()
         with Journal(self.root / "history.db") as journal:
             with patch("organizer.moves.os.link", side_effect=OSError("Unsupported filesystem")):
@@ -134,11 +134,13 @@ class OrganizerTests(unittest.TestCase):
                     journal.move(proposal)
             journal.recover()
             self.assertEqual(proposal.source.read_bytes(), b"important data")
-            self.assertEqual(journal.history()[0][3], "review")
-            self.assertEqual(next(proposal.destination.parent.glob(".organizer-*.tmp")).read_bytes(), b"important data")
-            with self.assertRaises(ValueError):
-                journal.move(proposal)
-            self.assertEqual(len(journal.history()), 1)
+            self.assertEqual(journal.history()[0][3], "retryable")
+            self.assertIn("original is intact", journal.history()[0][4])
+            self.assertEqual(list(proposal.destination.parent.glob(".organizer-*.tmp")), [])
+            self.assertEqual(journal.move(proposal), proposal.destination)
+            self.assertEqual([row[3] for row in journal.history()], ["complete", "retryable"])
+            self.assertFalse(proposal.source.exists())
+            self.assertEqual(proposal.destination.read_bytes(), b"important data")
 
     def test_source_removal_failure_preserves_both_copies(self):
         proposal = self.ready_proposal()
@@ -155,6 +157,59 @@ class OrganizerTests(unittest.TestCase):
             self.assertEqual(proposal.source.read_bytes(), b"important data")
             self.assertEqual(proposal.destination.read_bytes(), b"important data")
             self.assertEqual(journal.history()[0][3], "review")
+
+    def test_review_move_and_keep_verify_copies(self):
+        for choice in ("move", "keep"):
+            with self.subTest(choice=choice):
+                proposal = self.ready_proposal()
+                with Journal(self.root / f"{choice}.db") as journal:
+                    unlink = Path.unlink
+                    def locked(path, *args, **kwargs):
+                        if path == proposal.source:
+                            raise PermissionError("Download is locked")
+                        return unlink(path, *args, **kwargs)
+                    with patch.object(Path, "unlink", locked):
+                        with self.assertRaises(PermissionError):
+                            journal.move(proposal)
+                    journal.recover()
+                    self.assertEqual(journal.history()[0][3], "review")
+                    resolved = journal.resolve_review(1, choice)
+                    self.assertEqual(journal.history()[0][3], "complete" if choice == "move" else "kept")
+                    self.assertEqual(resolved, proposal.destination if choice == "move" else proposal.source)
+                    self.assertEqual(proposal.source.exists(), choice == "keep")
+                    self.assertEqual(proposal.destination.exists(), choice == "move")
+                    if choice == "keep":
+                        self.assertEqual(journal.kept_sources()[str(proposal.source)], proposal.signature)
+                    else:
+                        resolved.unlink()
+
+    def test_review_rejects_changed_destination(self):
+        proposal = self.ready_proposal()
+        with Journal(self.root / "changed.db") as journal:
+            unlink = Path.unlink
+            def locked(path, *args, **kwargs):
+                if path == proposal.source:
+                    raise PermissionError("Locked")
+                return unlink(path, *args, **kwargs)
+            with patch.object(Path, "unlink", locked):
+                with self.assertRaises(PermissionError):
+                    journal.move(proposal)
+            proposal.destination.write_bytes(b"changed")
+            with self.assertRaises(ValueError):
+                journal.resolve_review(1, "keep")
+            self.assertTrue(proposal.source.exists())
+            self.assertEqual(proposal.destination.read_bytes(), b"changed")
+
+    def test_interrupted_keep_remains_kept_after_restart(self):
+        proposal = self.ready_proposal()
+        with Journal(self.root / "keep-crash.db") as journal:
+            journal.db.execute("""INSERT INTO operations (source,destination,state,hash,signature,error)
+                VALUES (?,?,'keep_pending',?,?, '')""",
+                (str(proposal.source), str(proposal.destination), "", "[]"))
+            journal.db.commit()
+            journal.recover()
+            self.assertEqual(journal.history()[0][3], "kept")
+            self.assertEqual(journal.kept_sources()[str(proposal.source)], proposal.signature)
 
     def test_source_change_during_copy_is_preserved(self):
         proposal = self.ready_proposal()

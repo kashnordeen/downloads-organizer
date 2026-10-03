@@ -42,12 +42,18 @@ class Journal:
 
     def unresolved_sources(self):
         return {row[0] for row in self.db.execute(
-            "SELECT source FROM operations WHERE state IN ('pending','published','review')")}
+            "SELECT source FROM operations WHERE state IN ('pending','published','review','keep_pending')")}
+
+    def kept_sources(self):
+        return {source: tuple(json.loads(saved)) for source, saved in self.db.execute(
+            "SELECT source,signature FROM operations WHERE state='kept'")}
 
     def move(self, proposal, undo_of=None):
         source = safe_path(proposal.source)
         if str(source) in self.unresolved_sources():
             raise ValueError("An earlier operation for this file needs review; no duplicate move attempted")
+        if self.kept_sources().get(str(source)) == proposal.signature:
+            raise ValueError("This file was left in Downloads after review")
         if proposal.destination is None or proposal.signature != signature(source):
             raise ValueError("File changed since preview; preview again")
         if time.time_ns() - source.stat().st_mtime_ns < 2_000_000_000:
@@ -118,13 +124,76 @@ class Journal:
             raise ValueError("Destination changed or is missing; undo cancelled")
         return self.move(Proposal(destination, source, "Undo", signature(destination)), undo_of=operation)
 
+    def resolve_review(self, operation, choice):
+        row = self.db.execute("SELECT source,destination,state,hash,signature,temp,undo_of FROM operations WHERE id=?",
+                              (operation,)).fetchone()
+        if not row or row[2] != "review" or choice not in ("move", "keep"):
+            raise ValueError("Select a move marked review")
+        source, target = safe_path(row[0]), safe_path(row[1])
+        if not source.is_file():
+            raise ValueError("Original file is missing; no action taken")
+        if target.exists() or target.is_symlink():
+            if (not target.is_file() or tuple(json.loads(row[4])) != signature(target)
+                    or digest(target) != row[3] or digest(source) != row[3]):
+                raise ValueError("A copy changed; both files were left untouched")
+            if choice == "move":
+                source.unlink()
+                state = "complete"
+            else:
+                self.update(operation, state="keep_pending")
+                try:
+                    target.unlink()
+                except OSError as error:
+                    self.update(operation, state="review", error=str(error))
+                    raise
+                state = "kept"
+        elif choice == "move":
+            self.update(operation, state="retryable", error="Retry requested from History")
+            return self.move(Proposal(source, target, "Review", signature(source)))
+        else:
+            state = "kept"
+        self.update(operation, state=state, signature=json.dumps(signature(target if state == "complete" else source)),
+                    temp="", error="")
+        if state == "complete" and row[6] is not None:
+            self.update(row[6], state="undone")
+        if row[5]:
+            partial = Path(row[5])
+            if (partial.name.startswith(".organizer-") and partial.suffix == ".tmp"
+                    and safe_path(partial).parent == target.parent and partial.is_file()):
+                try:
+                    partial.unlink()
+                except OSError:
+                    pass
+        return target if state == "complete" else source
+
     def recover(self):
-        rows = self.db.execute("""SELECT id,source,destination,hash,signature,temp,undo_of
-            FROM operations WHERE state IN ('pending','published','review')""").fetchall()
-        for operation, source, destination, expected, saved, temp, undo_of in rows:
+        rows = self.db.execute("""SELECT id,source,destination,hash,signature,temp,undo_of,error
+            FROM operations WHERE state IN ('pending','published','review','keep_pending')""").fetchall()
+        for operation, source, destination, expected, saved, temp, undo_of, error in rows:
             try:
-                original, target = Path(source), Path(destination)
-                safe_path(target)
+                original, target = safe_path(source), safe_path(destination)
+                state = self.db.execute("SELECT state FROM operations WHERE id=?", (operation,)).fetchone()[0]
+                if state == "keep_pending" and original.is_file() and not target.exists():
+                    if temp:
+                        partial = Path(temp)
+                        if partial.name.startswith(".organizer-") and partial.suffix == ".tmp":
+                            partial = safe_path(partial)
+                            if partial.parent == target.parent and partial.is_file():
+                                partial.unlink()
+                    self.update(operation, state="kept", signature=json.dumps(signature(original)),
+                                temp="", error="")
+                    continue
+                if original.is_file() and not target.exists():
+                    if temp:
+                        partial = Path(temp)
+                        if partial.name.startswith(".organizer-") and partial.suffix == ".tmp":
+                            partial = safe_path(partial)
+                            if partial.parent == target.parent and partial.is_file():
+                                partial.unlink()
+                    detail = (f"{error or 'Move was interrupted'}; original is intact and "
+                              "destination is absent. Refresh Preview to retry.")
+                    self.update(operation, state="retryable", error=detail)
+                    continue
                 if (not original.exists() and not original.is_symlink() and target.is_file()
                         and signature(target)[:4] == tuple(json.loads(saved))[:4] and digest(target) == expected):
                     self.update(operation, state="complete", error="")

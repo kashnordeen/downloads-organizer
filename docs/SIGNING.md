@@ -2,7 +2,7 @@
 
 ## Current status
 
-Windows v0.2.0 preview downloads are unsigned. SignPath Foundation approval,
+Windows v1.0.0 downloads are unsigned. SignPath Foundation approval,
 account configuration, and signing integration are pending. This document does
 not claim sponsorship, certification, or that any existing download is signed.
 macOS Developer ID signing and notarization are separate requirements.
@@ -49,9 +49,9 @@ See [SignPath's privacy policy](https://about.signpath.io/privacy-policy).
    sign the installer. Upload each unsigned artifact to GitHub Actions and use
    its artifact ID for the request; download and verify the returned artifact.
 5. Run the installed runtime checks against the signed result, create final
-   checksums, and publish a new release. Do not silently replace the old preview.
+   checksums, and publish a new release. Do not silently replace an existing release.
 
-The current workflow builds unsigned previews. It contains no signing action or
+The current workflow builds unsigned packages. It contains no signing action or
 credentials. Successful Foundation enrollment and this checklist are required
 before a signed release can be produced. Windows reputation warnings can still
 appear for new signed downloads; see [Microsoft's guidance](https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/smartscreen-reputation).

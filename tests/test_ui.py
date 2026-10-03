@@ -7,7 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QTimer
+from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 from organizer.app import Window
 
 APP = QApplication.instance() or QApplication([])
@@ -32,9 +33,11 @@ class DesktopFlowTest(unittest.TestCase):
                 window.setup_first_run()
             self.assertIsNone(window.folder)
             self.assertFalse(window.settings_path.exists())
-            with patch("organizer.app.initial_folder", return_value=str(downloads)):
+            with patch("organizer.app.initial_folder", return_value=str(downloads)), \
+                 patch("organizer.app.guided_tour") as tour:
                 window.setup_first_run()
-            self.assertEqual(window.pages.currentIndex(), 1)
+            tour.assert_called_once_with(window)
+            self.assertTrue(window.tour_done)
             self.assertFalse(window.automatic.isChecked())
             self.assertEqual(source.read_bytes(), b"unchanged")
             window.rules.item(0, 1).setText("My documents")
@@ -47,6 +50,25 @@ class DesktopFlowTest(unittest.TestCase):
             self.assertEqual(restarted.read_rules()[0].name, "My documents")
             self.assertFalse(restarted.automatic.isChecked())
             restarted.close()
+
+    def test_guided_tour_visits_every_workspace_page(self):
+        from organizer.ui import guided_tour
+        with tempfile.TemporaryDirectory() as directory:
+            window = Window(Path(directory).resolve() / "data")
+            pages = []
+            def advance():
+                pages.append(window.pages.currentIndex())
+                dialog = APP.activeModalWidget()
+                next_button = next(child for child in dialog.findChildren(QPushButton)
+                                   if child.text() in ("Next", "Finish tour"))
+                next_button.click()
+                if len(pages) < 5:
+                    QTimer.singleShot(0, advance)
+            QTimer.singleShot(0, advance)
+            guided_tour(window)
+            self.assertEqual(pages, [1, 0, 2, 3, 0])
+            self.assertEqual(window.pages.currentIndex(), 0)
+            window.close()
 
     def test_rule_form_rejects_invalid_destination_and_saves_normalized_rule(self):
         from organizer.ui import RuleDialog
@@ -224,6 +246,87 @@ class DesktopFlowTest(unittest.TestCase):
             self.wait_worker(restarted)
             self.assertEqual(source.read_bytes(), b"test report")
             restarted.close()
+
+    def test_review_keep_and_preview_button(self):
+        from organizer.moves import Journal
+        from organizer.core import preview
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            source = downloads / "report.pdf"
+            source.write_bytes(b"report")
+            os.utime(source, (time.time() - 10, time.time() - 10))
+            data = root / "data"
+            window = Window(data)
+            window.set_folder(downloads)
+            proposal = preview(downloads, window.read_rules())[0]
+            unlink = Path.unlink
+
+            def locked(path, *args, **kwargs):
+                if path == source:
+                    raise PermissionError("Locked")
+                return unlink(path, *args, **kwargs)
+
+            with Journal(data / "history.db") as journal:
+                with patch.object(Path, "unlink", locked):
+                    with self.assertRaises(PermissionError):
+                        journal.move(proposal)
+            window.load_history(recover=True)
+            window.history_table.setCurrentCell(0, 0)
+            self.assertTrue(window.review_keep.isEnabled())
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                window.review_keep.click()
+            self.wait_worker(window)
+            self.assertTrue(source.exists())
+            self.assertFalse(proposal.destination.exists())
+            self.assertEqual(window.history_table.item(0, 3).text(), "kept")
+            window.refresh()
+            self.assertFalse(window.organize.isEnabled())
+            self.assertEqual(window.files.item(0, 2).text(), "Left in Downloads after review")
+            window.close()
+
+            second = downloads / "another.pdf"
+            second.write_bytes(b"another")
+            os.utime(second, (time.time() - 10, time.time() - 10))
+            restarted = Window(data)
+            restarted.set_folder(downloads)
+            restarted.refresh()
+            self.assertTrue(restarted.organize.isEnabled())
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                restarted.organize.click()
+            self.wait_worker(restarted)
+            self.assertTrue((downloads / "Documents" / second.name).exists())
+            self.assertTrue(source.exists())
+            restarted.close()
+
+    def test_original_only_interruption_retries_from_preview(self):
+        from organizer.moves import Journal
+        from organizer.core import preview
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            source = downloads / "installer.exe"
+            source.write_bytes(b"installer")
+            os.utime(source, (time.time() - 10, time.time() - 10))
+            window = Window(root / "data")
+            window.set_folder(downloads)
+            proposal = preview(downloads, window.read_rules())[0]
+            with Journal(root / "data" / "history.db") as journal:
+                with patch("organizer.moves.os.link", side_effect=OSError("Temporary publish failure")):
+                    with self.assertRaises(OSError):
+                        journal.move(proposal)
+            window.load_history(recover=True)
+            window.refresh()
+            self.assertTrue(window.organize.isEnabled())
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                window.organize.click()
+            self.wait_worker(window)
+            self.assertFalse(source.exists())
+            self.assertEqual(proposal.destination.read_bytes(), b"installer")
+            self.assertEqual(window.history_table.item(0, 3).text(), "complete")
+            window.close()
 
     def test_editing_rules_invalidates_preview(self):
         with tempfile.TemporaryDirectory() as directory:

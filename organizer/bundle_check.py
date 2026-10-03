@@ -7,10 +7,9 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QLockFile
-from PySide6.QtWidgets import QApplication, QSystemTrayIcon
+from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from .app import Window
-from .core import preview
 from .moves import Journal
 from .startup import launch_command, packaged_windows
 
@@ -41,10 +40,18 @@ def verify(report_path):
         for index in [1, 2, 3, 0]:
             window.navigation.button(index).click()
             assert window.pages.currentIndex() == index and window.organize.isEnabled()
-        proposals = preview(downloads, window.read_rules())
+        question = QMessageBox.question
+        QMessageBox.question = lambda *args: QMessageBox.Yes
+        try:
+            window.organize.click()
+        finally:
+            QMessageBox.question = question
+        wait_until(lambda: window.worker is not None and not window.worker.isRunning())
+        app.processEvents()
         with Journal(root / "data/history.db") as journal:
-            moved = journal.move(proposals[0])
+            moved = downloads / "Documents" / original.name
             assert moved.exists() and not original.exists()
+            assert journal.history()[0][3] == "complete"
             journal.undo(journal.history()[0][0])
             assert original.read_bytes() == b"Bundle verification only"
         window.show()
@@ -91,7 +98,7 @@ def verify(report_path):
             from winrt.windows.applicationmodel import StartupTask
             from winrt.windows.foundation import AsyncStatus
             assert StartupTask.get_async and AsyncStatus.STARTED == 0
-        checks = ["native window", "workspace navigation", "window/tray icon", "preview", "move", "undo",
+        checks = ["native window", "workspace navigation", "window/tray icon", "preview organize button", "move", "undo",
                   "configuration lock", "automatic worker", "stopped-period catch-up", "frozen startup command"]
         if tray:
             checks.append("tray close/show/quit")
