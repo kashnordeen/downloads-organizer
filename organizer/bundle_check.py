@@ -6,7 +6,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QLockFile, QTimer
+from PySide6.QtCore import QLockFile
 from PySide6.QtWidgets import QApplication, QMessageBox, QSystemTrayIcon
 
 from .app import Window
@@ -40,8 +40,12 @@ def verify(report_path):
         for index in [1, 2, 3, 0]:
             window.navigation.button(index).click()
             assert window.pages.currentIndex() == index and window.organize.isEnabled()
-        QTimer.singleShot(0, lambda: QApplication.activeModalWidget().button(QMessageBox.Yes).click())
-        window.organize.click()
+        question = QMessageBox.question
+        QMessageBox.question = lambda *args: QMessageBox.Yes
+        try:
+            window.organize.click()
+        finally:
+            QMessageBox.question = question
         wait_until(lambda: window.worker is not None and not window.worker.isRunning())
         app.processEvents()
         with Journal(root / "data/history.db") as journal:
