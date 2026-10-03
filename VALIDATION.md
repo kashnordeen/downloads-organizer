@@ -2,7 +2,7 @@
 
 ## 1.0.0 stable release
 
-The Windows source test suite passed on 2026-10-03: 34 tests, one Windows
+The Windows source test suite passed on 2026-10-03: 35 tests, one Windows
 symlink-privilege skip. It covers review choices, keeping a file in Downloads,
 the guided tour, and clicking **Organize files** in Preview after confirmation.
 Cross-platform package and installation results will be linked here after the

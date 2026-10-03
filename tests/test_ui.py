@@ -247,7 +247,7 @@ class DesktopFlowTest(unittest.TestCase):
             self.assertEqual(source.read_bytes(), b"test report")
             restarted.close()
 
-    def test_review_choices_and_recovered_preview_button(self):
+    def test_review_keep_and_preview_button(self):
         from organizer.moves import Journal
         from organizer.core import preview
         with tempfile.TemporaryDirectory() as directory:
@@ -299,6 +299,34 @@ class DesktopFlowTest(unittest.TestCase):
             self.assertTrue((downloads / "Documents" / second.name).exists())
             self.assertTrue(source.exists())
             restarted.close()
+
+    def test_original_only_interruption_retries_from_preview(self):
+        from organizer.moves import Journal
+        from organizer.core import preview
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            source = downloads / "installer.exe"
+            source.write_bytes(b"installer")
+            os.utime(source, (time.time() - 10, time.time() - 10))
+            window = Window(root / "data")
+            window.set_folder(downloads)
+            proposal = preview(downloads, window.read_rules())[0]
+            with Journal(root / "data" / "history.db") as journal:
+                with patch("organizer.moves.os.link", side_effect=OSError("Temporary publish failure")):
+                    with self.assertRaises(OSError):
+                        journal.move(proposal)
+            window.load_history(recover=True)
+            window.refresh()
+            self.assertTrue(window.organize.isEnabled())
+            with patch.object(QMessageBox, "question", return_value=QMessageBox.Yes):
+                window.organize.click()
+            self.wait_worker(window)
+            self.assertFalse(source.exists())
+            self.assertEqual(proposal.destination.read_bytes(), b"installer")
+            self.assertEqual(window.history_table.item(0, 3).text(), "complete")
+            window.close()
 
     def test_editing_rules_invalidates_preview(self):
         with tempfile.TemporaryDirectory() as directory:
