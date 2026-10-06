@@ -6,7 +6,7 @@ from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QMessageB
     QTableWidgetItem, QSystemTrayIcon, QMenu)
 
 from .core import Rule, defaults, load_settings, load_options, preview, save_settings
-from .moves import Journal
+from .moves import Journal, OperationCancelled
 from .worker import MonitorWorker
 from .startup import set_startup, startup_enabled
 from .ui import build_ui, RuleDialog, initial_folder, guided_tour
@@ -14,6 +14,7 @@ from .ui import build_ui, RuleDialog, initial_folder, guided_tour
 
 class MoveWorker(QThread):
     report = Signal(str)
+    progress = Signal(str, str, object, object)
 
     def __init__(self, data_dir, proposals, parent):
         super().__init__(parent)
@@ -21,7 +22,8 @@ class MoveWorker(QThread):
 
     def run(self):
         try:
-            with Journal(self.data_dir / "history.db") as journal:
+            with Journal(self.data_dir / "history.db", cancelled=self.isInterruptionRequested,
+                         progress=lambda path, phase, done, total: self.progress.emit(path.name, phase, done, total)) as journal:
                 if isinstance(self.proposals, int):
                     restored = journal.undo(self.proposals)
                     self.report.emit(f"Restored {restored}")
@@ -33,12 +35,14 @@ class MoveWorker(QThread):
                     return
                 for proposal in self.proposals:
                     if self.isInterruptionRequested():
-                        break
+                        raise OperationCancelled("Cancelled; remaining files were left untouched")
                     try:
                         destination = journal.move(proposal)
                         self.report.emit(f"Moved {proposal.source.name} → {destination}")
                     except (OSError, ValueError) as error:
                         self.report.emit(f"Skipped {proposal.source.name}: {error}")
+        except OperationCancelled as error:
+            self.report.emit(str(error))
         except Exception as error:
             self.report.emit(f"Operation stopped safely: {error}")
 
@@ -95,9 +99,9 @@ class Window(QMainWindow):
             QTimer.singleShot(0, lambda: self.toggle_automatic(True))
 
     def show_page(self, index):
-        titles = ["Preview your downloads", "Organization rules", "Move history", "Settings"]
+        titles = ["Organize with confidence.", "Your rules. Your folders.", "Every move, accounted for.", "Make it work for you."]
         descriptions = ["Review where each file will go before you organize it.",
-                        "Rules run from top to bottom. The first enabled match wins. Double-click a field to edit.",
+                        "Rules run from top to bottom. Select a rule to edit its filters and destination.",
                         "Select a completed move to undo. Changed files and occupied paths are protected.",
                         "Control how the organizer runs on this device."]
         self.pages.setCurrentIndex(index)
@@ -181,6 +185,8 @@ class Window(QMainWindow):
             self.watcher.addPath(str(self.folder))
             self.monitor = MonitorWorker(self.folder, rules, self.data_dir, self)
             self.monitor.report.connect(self.status.setText)
+            self.monitor.progress.connect(self.show_progress)
+            self.monitor.idle.connect(self.operation_idle)
             self.monitor.changed.connect(self.load_history)
             self.monitor.finished.connect(self.monitor_finished)
             self.organize.setEnabled(False)
@@ -195,6 +201,7 @@ class Window(QMainWindow):
         self.update_ui()
 
     def monitor_finished(self):
+        self.operation_idle()
         if self.quitting:
             self.close()
             return
@@ -232,9 +239,10 @@ class Window(QMainWindow):
     def update_history_actions(self):
         row = self.history_table.currentRow()
         state = self.history_table.item(row, 3).text() if row >= 0 and self.history_table.item(row, 3) else ""
-        self.undo_button.setEnabled(state == "complete")
-        self.review_move.setEnabled(state == "review")
-        self.review_keep.setEnabled(state == "review")
+        busy = bool((self.worker and self.worker.isRunning()) or (self.monitor and self.monitor.isRunning()))
+        self.undo_button.setEnabled(state == "complete" and not busy)
+        self.review_move.setEnabled(state == "review" and not busy)
+        self.review_keep.setEnabled(state == "review" and not busy)
 
     def resolve_review(self, choice):
         row = self.history_table.currentRow()
@@ -262,14 +270,56 @@ class Window(QMainWindow):
         self.start_worker(operation)
 
     def start_worker(self, work):
+        if self.worker is not None and self.worker.isRunning():
+            return
         if self.monitor is not None and self.monitor.isRunning():
             self.status.setText("Pause automatic sorting before a manual move or undo.")
             return
-        self.setEnabled(False)
+        self.operation_panel.show()
+        self.operation_label.setText("Preparing operation…")
+        self.operation_detail.setText("You can cancel safely. Completed moves stay in History.")
+        self.progress_bar.setRange(0, 0)
+        self.cancel_button.setText("Cancel")
+        self.cancel_button.setEnabled(True)
         self.worker = MoveWorker(self.data_dir, work, self)
         self.worker.report.connect(self.status.setText)
+        self.worker.progress.connect(self.show_progress)
         self.worker.finished.connect(self.finished)
         self.worker.start()
+        self.set_operation_busy(True)
+
+    def set_operation_busy(self, busy):
+        for control in self.mutation_controls:
+            control.setEnabled(not busy)
+        self.organize.setEnabled(False)
+        self.update_history_actions()
+
+    def show_progress(self, name, phase, done, total):
+        self.operation_panel.show()
+        self.operation_label.setText(name)
+        self.operation_label.setToolTip(name)
+        self.progress_bar.setRange(0, 100 if total else 0)
+        if total:
+            self.progress_bar.setValue(min(100, int(done * 100 / total)))
+        stopping = bool((self.worker and self.worker.isInterruptionRequested()) or
+                        (self.monitor and self.monitor.isInterruptionRequested()))
+        detail = f"{phase} · {done / (1024 * 1024):,.1f} / {total / (1024 * 1024):,.1f} MB" if total else phase
+        self.operation_detail.setText("Stopping safely… " + detail if stopping else detail)
+        self.cancel_button.setText("Stopping…" if stopping else "Cancel")
+        self.cancel_button.setEnabled(not stopping and phase != "Finishing")
+
+    def cancel_operation(self):
+        if self.worker and self.worker.isRunning():
+            self.worker.requestInterruption()
+        if self.monitor and self.monitor.isRunning():
+            self.automatic.setChecked(False)
+            self.monitor.stop()
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setText("Stopping…")
+        self.operation_detail.setText("Stopping safely… Waiting for the current disk operation to return.")
+
+    def operation_idle(self):
+        self.operation_panel.hide()
 
     def invalidate(self):
         self.proposals = []
@@ -291,7 +341,8 @@ class Window(QMainWindow):
         self.start_worker(proposals)
 
     def finished(self):
-        self.setEnabled(True)
+        self.operation_idle()
+        self.set_operation_busy(False)
         self.invalidate()
         self.load_history()
         if self.quitting:
@@ -309,8 +360,9 @@ class Window(QMainWindow):
             event.ignore()
             return
         if self.worker is not None and self.worker.isRunning():
-            self.worker.requestInterruption()
-            self.status.setText("Finishing the current file safely. Close again when finished.")
+            self.quitting = True
+            self.cancel_operation()
+            self.status.setText("Stopping safely before exiting.")
             event.ignore()
         else:
             self.tray.hide()

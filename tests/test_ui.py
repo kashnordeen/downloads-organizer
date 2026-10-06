@@ -247,6 +247,48 @@ class DesktopFlowTest(unittest.TestCase):
             self.assertEqual(source.read_bytes(), b"test report")
             restarted.close()
 
+    def test_cancel_keeps_navigation_responsive_and_stops_remaining_files(self):
+        import threading
+        from organizer.moves import chunks
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            for name in ("large.pdf", "next.pdf"):
+                path = downloads / name
+                path.write_bytes(b"data" * 600000)
+                os.utime(path, (time.time() - 10, time.time() - 10))
+            window = Window(root / "data")
+            window.set_folder(downloads)
+            window.refresh()
+            entered, release = threading.Event(), threading.Event()
+            def slow_chunks(*args, **kwargs):
+                for chunk in chunks(*args, **kwargs):
+                    entered.set()
+                    release.wait(5)
+                    yield chunk
+            with patch("organizer.moves.chunks", slow_chunks):
+                window.start_worker(window.proposals)
+                try:
+                    self.wait_until(entered.is_set)
+                    window.navigation.button(2).click()
+                    self.assertEqual(window.pages.currentIndex(), 2)
+                    self.assertTrue(window.isEnabled())
+                    self.assertFalse(window.rules.isEnabled())
+                    self.assertTrue(window.cancel_button.isEnabled())
+                    window.cancel_button.click()
+                    self.assertTrue(window.worker.isInterruptionRequested())
+                    self.assertFalse(window.cancel_button.isEnabled())
+                finally:
+                    release.set()
+                    self.wait_worker(window)
+            self.assertTrue((downloads / "large.pdf").exists())
+            self.assertTrue((downloads / "next.pdf").exists())
+            self.assertFalse((downloads / "Documents" / "large.pdf").exists())
+            self.assertIn("Cancelled", window.status.text())
+            self.assertTrue(window.rules.isEnabled())
+            window.close()
+
     def test_review_keep_and_preview_button(self):
         from organizer.moves import Journal
         from organizer.core import preview

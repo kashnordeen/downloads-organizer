@@ -1,4 +1,4 @@
-"""Native Qt workspace layout and the shared blue color palette."""
+"""Focused native Qt layout and the shared blue color palette."""
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize
@@ -6,7 +6,7 @@ from PySide6.QtGui import QIcon, QPalette, QColor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QLineEdit, QMessageBox,
     QHeaderView, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget,
-    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon)
+    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon, QProgressBar)
 
 from .core import Rule
 
@@ -30,7 +30,7 @@ class RuleDialog(QDialog):
         destination = QHBoxLayout()
         destination.addWidget(self.destination)
         destination.addWidget(button("Browse…", self.browse))
-        self.enabled = QCheckBox("Enable this rule")
+        self.enabled = switch("Enable this rule")
         self.enabled.setChecked(rule.enabled)
         layout.addRow("&Name", self.name)
         layout.addRow("&Extensions", self.extensions)
@@ -149,6 +149,12 @@ def button(text, callback, primary=False):
     return control
 
 
+def switch(text):
+    control = QCheckBox(text)
+    control.setProperty("switch", True)
+    return control
+
+
 def table(headers, editable=False):
     control = QTableWidget(0, len(headers))
     control.setHorizontalHeaderLabels(headers)
@@ -175,6 +181,7 @@ def apply_theme(window, scheme=None):
         ("#f6f8fc", "#ffffff", "#24314a", "#58677f", "#dee5ef", "#2457d6", "#ffffff", "#edf2ff"))
     palette = window.palette()
     check = (Path(__file__).parent / "assets" / ("check-dark.svg" if dark else "check-light.svg")).as_posix()
+    assets = (Path(__file__).parent / "assets").as_posix()
     for role, color in [(QPalette.Window, bg), (QPalette.WindowText, ink),
                         (QPalette.Base, surface), (QPalette.AlternateBase, bg),
                         (QPalette.Text, ink), (QPalette.Button, surface),
@@ -185,9 +192,8 @@ def apply_theme(window, scheme=None):
     window.setStyleSheet(f"""
         QWidget {{ color: {ink}; font-size: 14px; }}
         QMainWindow, QDialog, QWidget#workspace {{ background: {bg}; }}
-        QWidget#sidebar, QFrame#folderCard {{ background: {surface}; }}
-        QWidget#sidebar {{ border-right: 1px solid {border}; }}
-        QFrame#folderCard {{ border: 1px solid {border}; border-radius: 8px; }}
+        QFrame#folderCard, QFrame#operation {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
+        QFrame#topnav {{ background: {surface}; border-bottom: 1px solid {border}; }}
         QLabel#brand {{ font-size: 16px; font-weight: 600; }}
         QLabel#pageTitle {{ font-size: 28px; font-weight: 600; }}
         QLabel[muted="true"] {{ color: {muted}; }}
@@ -200,7 +206,7 @@ def apply_theme(window, scheme=None):
         QPushButton[primary="true"] {{ background: {accent}; color: {onaccent}; border-color: {accent}; font-weight: 600; }}
         QPushButton[primary="true"]:hover {{ border: 2px solid {ink}; padding: 8px 13px; }}
         QPushButton:disabled {{ color: {muted}; background: {bg}; border-color: {border}; }}
-        QPushButton[nav="true"] {{ text-align: left; background: transparent; border-color: transparent; padding: 12px; }}
+        QPushButton[nav="true"] {{ background: transparent; border-color: transparent; padding: 10px 16px; }}
         QPushButton[nav="true"]:checked {{ background: {soft}; color: {accent}; font-weight: 600; }}
         QPushButton[nav="true"]:focus {{ border-color: {accent}; }}
         QTableWidget {{ background: {surface}; alternate-background-color: {bg};
@@ -218,6 +224,14 @@ def apply_theme(window, scheme=None):
         QCheckBox::indicator:checked, QTableView::indicator:checked {{
             background: {accent}; border-color: {accent}; image: url("{check}"); }}
         QCheckBox:disabled {{ color: {muted}; }}
+        QCheckBox[switch="true"]::indicator {{ width: 36px; height: 20px; border-radius: 11px;
+            background: {muted}; border-color: {muted}; image: url("{assets}/switch-off.svg"); }}
+        QCheckBox[switch="true"]::indicator:checked {{ background: {accent}; border-color: {accent};
+            image: url("{assets}/switch-on.svg"); }}
+        QCheckBox[switch="true"]::indicator:disabled {{ background: {border}; border-color: {border}; }}
+        QProgressBar {{ background: {soft}; border: none; border-radius: 4px; min-height: 8px; max-height: 8px; }}
+        QProgressBar::chunk {{ background: {accent}; border-radius: 4px; }}
+        QLabel#operationTitle {{ font-weight: 600; }}
         QScrollBar:vertical {{ width: 12px; background: {bg}; margin: 0; }}
         QScrollBar:horizontal {{ height: 12px; background: {bg}; margin: 0; }}
         QScrollBar::handle {{ background: {border}; border-radius: 5px; }}
@@ -237,27 +251,24 @@ def build_ui(window):
     body = QWidget()
     body.setObjectName("workspace")
     window.setCentralWidget(body)
-    shell = QHBoxLayout(body)
+    shell = QVBoxLayout(body)
     shell.setContentsMargins(0, 0, 0, 0)
     shell.setSpacing(0)
-    sidebar = QWidget()
-    sidebar.setObjectName("sidebar")
-    sidebar.setFixedWidth(190)
-    nav_layout = QVBoxLayout(sidebar)
-    nav_layout.setContentsMargins(16, 24, 16, 20)
+    topnav = QFrame()
+    topnav.setObjectName("topnav")
+    nav_layout = QHBoxLayout(topnav)
+    nav_layout.setContentsMargins(24, 12, 24, 12)
     nav_layout.setSpacing(8)
     logo = QLabel()
-    logo.setPixmap(window.windowIcon().pixmap(QSize(52, 52)))
+    logo.setPixmap(window.windowIcon().pixmap(QSize(36, 36)))
     nav_layout.addWidget(logo)
-    brand = QLabel("Downloads\nOrganizer")
+    brand = QLabel("Downloads Organizer")
     brand.setObjectName("brand")
     nav_layout.addWidget(brand)
-    nav_layout.addSpacing(28)
+    nav_layout.addStretch()
     window.navigation = QButtonGroup(window)
     window.pages = QStackedWidget()
     for index, name in enumerate(["Preview", "Rules", "History", "Settings"]):
-        if index == 3:
-            nav_layout.addStretch()
         nav = QPushButton(name)
         nav.setProperty("nav", True)
         nav.setCheckable(True)
@@ -265,17 +276,13 @@ def build_ui(window):
         nav.setToolTip(f"{name} (Alt+{index + 1})")
         window.navigation.addButton(nav, index)
         nav_layout.addWidget(nav)
-    local = QLabel("Files stay on this device")
-    local.setProperty("muted", True)
-    local.setWordWrap(True)
-    nav_layout.addWidget(local)
-    shell.addWidget(sidebar)
+    shell.addWidget(topnav)
     content = QVBoxLayout()
-    content.setContentsMargins(28, 24, 28, 20)
-    content.setSpacing(16)
+    content.setContentsMargins(32, 24, 32, 20)
+    content.setSpacing(12)
     shell.addLayout(content, 1)
     top = QHBoxLayout()
-    caption = QLabel("YOUR WORKSPACE")
+    caption = QLabel("FILES STAY ON THIS DEVICE")
     caption.setProperty("muted", True)
     top.addWidget(caption)
     top.addStretch()
@@ -304,8 +311,34 @@ def build_ui(window):
     window.folder_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
     folder_text.addWidget(window.folder_label)
     folder_row.addLayout(folder_text, 1)
-    folder_row.addWidget(button("Change folder…", window.choose_folder))
+    window.change_folder = button("Change folder…", window.choose_folder)
+    folder_row.addWidget(window.change_folder)
     content.addWidget(folder)
+    window.operation_panel = QFrame()
+    window.operation_panel.setObjectName("operation")
+    operation = QHBoxLayout(window.operation_panel)
+    operation.setContentsMargins(16, 12, 16, 12)
+    progress_text = QVBoxLayout()
+    window.operation_label = QLabel("Preparing…")
+    window.operation_label.setObjectName("operationTitle")
+    window.operation_label.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+    window.operation_label.setWordWrap(True)
+    window.operation_label.setTextFormat(Qt.PlainText)
+    progress_text.addWidget(window.operation_label)
+    window.progress_bar = QProgressBar()
+    window.progress_bar.setAccessibleName("Current phase progress")
+    window.progress_bar.setTextVisible(False)
+    progress_text.addWidget(window.progress_bar)
+    window.operation_detail = QLabel()
+    window.operation_detail.setWordWrap(True)
+    window.operation_detail.setProperty("muted", True)
+    progress_text.addWidget(window.operation_detail)
+    operation.addLayout(progress_text, 1)
+    window.cancel_button = button("Cancel", window.cancel_operation)
+    window.cancel_button.setAccessibleName("Cancel current operation and remaining files")
+    operation.addWidget(window.cancel_button)
+    content.addWidget(window.operation_panel)
+    window.operation_panel.hide()
     for _ in range(4):
         page = QWidget()
         layout = QVBoxLayout(page)
@@ -319,7 +352,8 @@ def build_ui(window):
     window.preview_summary = QLabel("Preview before moving files")
     window.preview_summary.setProperty("muted", True)
     actions.addWidget(window.preview_summary, 1)
-    actions.addWidget(button("Refresh preview", window.refresh))
+    window.refresh_button = button("Refresh preview", window.refresh)
+    actions.addWidget(window.refresh_button)
     window.organize = button("Organize files", window.execute, True)
     window.organize.setEnabled(False)
     actions.addWidget(window.organize)
@@ -336,23 +370,27 @@ def build_ui(window):
 
     rules_page = window.pages.widget(1).layout()
     window.rules = table(["On", "Rule", "Extensions", "Filename contains", "Destination folder"], True)
-    for col, width in enumerate([52, 140, 220, 160, 280]):
+    window.rules.setEditTriggers(QTableWidget.NoEditTriggers)
+    window.rules.doubleClicked.connect(lambda: window.edit_rule())
+    window.rules.setColumnHidden(3, True)
+    window.rules.verticalHeader().setDefaultSectionSize(60)
+    for col, width in enumerate([60, 170, 230, 160, 280]):
         window.rules.setColumnWidth(col, width)
     window.rules.horizontalHeader().setMinimumSectionSize(44)
     rules_page.addWidget(window.rules, 1)
     rule_actions = QHBoxLayout()
     for text, callback in [("Add rule", lambda: window.edit_rule(new=True)),
                            ("Edit selected", window.edit_rule),
-                           ("Remove selected", window.remove_rule),
-                           ("Move up", lambda: window.reorder(-1)), ("Move down", lambda: window.reorder(1))]:
-        rule_actions.addWidget(button(text, callback))
+                           ("Remove", window.remove_rule),
+                           ("↑", lambda: window.reorder(-1)), ("↓", lambda: window.reorder(1))]:
+        control = button(text, callback)
+        if text in ("↑", "↓"):
+            control.setAccessibleName("Move rule up" if text == "↑" else "Move rule down")
+            control.setToolTip(control.accessibleName())
+        rule_actions.addWidget(control)
     rule_actions.addStretch()
+    rule_actions.addWidget(button("Save rules", window.save, True))
     rules_page.addLayout(rule_actions)
-    rule_save = QHBoxLayout()
-    rule_save.addWidget(button("Browse destination…", window.choose_destination))
-    rule_save.addStretch()
-    rule_save.addWidget(button("Save rules", window.save, True))
-    rules_page.addLayout(rule_save)
 
     history = window.pages.widget(2).layout()
     window.history_table = table(["ID", "Original file", "Destination", "State", "Details"])
@@ -376,16 +414,17 @@ def build_ui(window):
     window.history_table.itemSelectionChanged.connect(window.update_history_actions)
 
     settings = window.pages.widget(3).layout()
-    window.tray_mode = QCheckBox("Keep running in the tray when the window closes")
+    window.tray_mode = switch("Keep running when the window closes")
     window.tray_mode.setEnabled(QSystemTrayIcon.isSystemTrayAvailable())
     window.tray_mode.setToolTip("Without a system tray, closing exits safely.")
     settings.addWidget(window.tray_mode)
-    window.login_start = QCheckBox("Start at login")
+    window.login_start = switch("Start at login")
     window.login_start.setToolTip("Optional per-user startup. Your operating system can disable it.")
     settings.addWidget(window.login_start)
     help_text = QLabel("Automatic sorting checks files downloaded while the app was stopped first.\n\n"
                        "Changing the folder or editing rules pauses sorting so you can review the changes.\n\n"
-                       "Quit finishes the current file safely. When you reopen, saved automatic mode resumes.")
+                       "Cancel stops copying and verification safely. Completed moves remain in History.\n"
+                       "When you reopen, saved automatic mode resumes.")
     help_text.setProperty("muted", True)
     help_text.setWordWrap(True)
     settings.addWidget(help_text)
@@ -395,20 +434,24 @@ def build_ui(window):
     about.setWordWrap(True)
     about.setTextInteractionFlags(Qt.TextSelectableByMouse)
     settings.addWidget(about)
-    settings.addWidget(button("Replay guided tour", window.show_help))
+    window.tour_button = button("Replay guided tour", window.show_help)
+    settings.addWidget(window.tour_button)
     settings.addStretch()
     quit_row = QHBoxLayout()
     quit_row.addWidget(button("Quit app", window.request_quit))
     quit_row.addStretch()
     settings.addLayout(quit_row)
 
-    window.automatic = QCheckBox("Automatically organize using saved rules")
+    window.automatic = switch("Automatically organize using saved rules")
     content.addWidget(window.automatic)
     window.status = QLabel("Manual mode. Preview never moves files.")
     window.status.setProperty("muted", True)
+    window.status.setTextFormat(Qt.PlainText)
     window.status.setWordWrap(True)
     window.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
     content.addWidget(window.status)
+    window.mutation_controls = [window.pages.widget(1), window.rules, window.change_folder,
+                                window.refresh_button, window.automatic, window.tour_button]
     window.navigation.idClicked.connect(window.show_page)
     window.show_page(0)
     apply_theme(window)
