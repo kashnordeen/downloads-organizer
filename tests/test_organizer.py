@@ -213,17 +213,64 @@ class OrganizerTests(unittest.TestCase):
 
     def test_source_change_during_copy_is_preserved(self):
         proposal = self.ready_proposal()
-        import shutil
-        copy = shutil.copyfileobj
-        def changing(origin, target, length):
-            copy(origin, target, length)
-            proposal.source.write_bytes(b"new download data")
-        with Journal(self.root / "history.db") as journal:
-            with patch("organizer.moves.shutil.copyfileobj", changing):
-                with self.assertRaises(ValueError):
-                    journal.move(proposal)
+        def changing(path, phase, done, total):
+            if phase == "Copying" and done:
+                proposal.source.write_bytes(b"new download data")
+        with Journal(self.root / "history.db", progress=changing) as journal:
+            with self.assertRaises(ValueError):
+                journal.move(proposal)
             self.assertEqual(proposal.source.read_bytes(), b"new download data")
             self.assertFalse(proposal.destination.exists())
+
+    def test_cancel_during_read_copy_and_verification_preserves_original(self):
+        from organizer.moves import OperationCancelled
+        for phase in ("Checking", "Copying", "Verifying copy", "Verifying original", "Final check"):
+            with self.subTest(phase=phase):
+                proposal = self.ready_proposal()
+                content = b"important data" * 240000
+                proposal.source.write_bytes(content)
+                os.utime(proposal.source, (time.time() - 10, time.time() - 10))
+                from organizer.core import signature
+                proposal.signature = signature(proposal.source)
+                cancelled = [False]
+                def progress(path, current, done, total):
+                    if current == phase and done:
+                        self.assertLess(done, total)
+                        cancelled[0] = True
+                with Journal(self.root / (phase + ".db"), cancelled=lambda: cancelled[0], progress=progress) as journal:
+                    with self.assertRaises(OperationCancelled):
+                        journal.move(proposal)
+                    self.assertEqual(proposal.source.read_bytes(), content)
+                    self.assertEqual(list(proposal.destination.parent.glob(".organizer-*.tmp")), [])
+                    if phase == "Final check":
+                        self.assertEqual(proposal.destination.read_bytes(), content)
+                        self.assertEqual(journal.history()[0][3], "review")
+                        proposal.destination.unlink()
+                    else:
+                        self.assertFalse(proposal.destination.exists())
+                        self.assertEqual(journal.unresolved_sources(), set())
+
+    def test_cancel_undo_keeps_completed_move_and_handles_zero_bytes(self):
+        from organizer.moves import OperationCancelled
+        proposal = self.ready_proposal()
+        with Journal(self.root / "undo-cancel.db") as journal:
+            destination = journal.move(proposal)
+            journal.cancelled = lambda: True
+            with self.assertRaises(OperationCancelled):
+                journal.undo(1)
+            self.assertEqual(destination.read_bytes(), b"important data")
+            self.assertFalse(proposal.source.exists())
+            self.assertEqual(journal.history()[0][3], "complete")
+            journal.cancelled = None
+            journal.undo(1)
+        proposal.source.write_bytes(b"")
+        os.utime(proposal.source, (time.time() - 10, time.time() - 10))
+        from organizer.core import signature
+        proposal.signature = signature(proposal.source)
+        events = []
+        with Journal(self.root / "empty.db", progress=lambda *event: events.append(event)) as journal:
+            self.assertEqual(journal.move(proposal).read_bytes(), b"")
+            self.assertTrue(any(event[1] == "Finishing" for event in events))
 
     def test_disappearing_file_does_not_break_scan(self):
         proposal = self.ready_proposal()
