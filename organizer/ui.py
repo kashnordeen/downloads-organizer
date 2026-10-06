@@ -178,12 +178,13 @@ def table(headers, editable=False):
 
 def apply_theme(window, scheme=None):
     if scheme is not None:
-        window.theme_controls.button(int(scheme == Qt.ColorScheme.Dark)).setChecked(True)
-    dark = window.theme_controls.checkedId() == 1
+        window.night_mode.setChecked(scheme == Qt.ColorScheme.Dark)
+    dark = window.night_mode.isChecked()
     bg, surface, ink, muted, border, accent, onaccent, soft = (
         ("#151a24", "#1d2431", "#eef3fc", "#adb9cf", "#343f53", "#a8c8ff", "#10264e", "#26354f")
         if dark else
-        ("#f6f8fc", "#ffffff", "#24314a", "#58677f", "#dee5ef", "#2457d6", "#ffffff", "#edf2ff"))
+        ("#f6f8fc", "#ffffff", "#24314a", "#58677f", "#c7d2e3", "#2457d6", "#ffffff", "#edf2ff"))
+    divider = "#536179" if dark else "#8798b0"
     palette = window.palette()
     check = (Path(__file__).parent / "assets" / ("check-dark.svg" if dark else "check-light.svg")).as_posix()
     assets = (Path(__file__).parent / "assets").as_posix()
@@ -191,7 +192,8 @@ def apply_theme(window, scheme=None):
                         (QPalette.Base, surface), (QPalette.AlternateBase, bg),
                         (QPalette.Text, ink), (QPalette.Button, surface),
                         (QPalette.ButtonText, ink), (QPalette.Highlight, accent),
-                        (QPalette.HighlightedText, onaccent)]:
+                        (QPalette.HighlightedText, onaccent), (QPalette.PlaceholderText, muted),
+                        (QPalette.ToolTipBase, surface), (QPalette.ToolTipText, ink)]:
         palette.setColor(role, QColor(color))
     window.setPalette(palette)
     window.setStyleSheet(f"""
@@ -217,16 +219,18 @@ def apply_theme(window, scheme=None):
         QPushButton[nav="true"]:focus {{ border-color: {accent}; }}
         QTableWidget {{ background: {surface}; alternate-background-color: {bg};
                         border: 1px solid {border}; border-radius: 6px;
-                        gridline-color: {border};
+                        gridline-color: {divider};
                         selection-background-color: {soft}; selection-color: {ink}; }}
         QTableWidget::item {{ padding: 8px; }}
         QTableWidget::item:focus {{ border: 1px solid {accent}; }}
         QHeaderView::section {{ background: {bg}; color: {muted}; border: none;
-                                border-right: 1px solid {border}; border-bottom: 1px solid {border};
+                                border-right: 1px solid {divider}; border-bottom: 1px solid {divider};
                                 padding: 12px; font-weight: 600; }}
         QTableCornerButton::section {{ background: {bg}; border: none;
-                                     border-right: 1px solid {border}; border-bottom: 1px solid {border}; }}
-        QLineEdit {{ background: {surface}; color: {ink}; border: 2px solid {accent}; padding: 4px; }}
+                                     border-right: 1px solid {divider}; border-bottom: 1px solid {divider}; }}
+        QLineEdit {{ background: {surface}; color: {ink}; placeholder-text-color: {muted};
+                     border: 1px solid {divider}; padding: 5px; }}
+        QLineEdit:focus {{ border: 2px solid {accent}; padding: 4px; }}
         QCheckBox {{ spacing: 10px; padding: 7px 0; border: 1px solid transparent; border-radius: 4px; }}
         QCheckBox:focus {{ border-color: {accent}; }}
         QCheckBox::indicator {{ width: 18px; height: 18px;
@@ -315,16 +319,6 @@ def build_ui(window):
     caption.setProperty("muted", True)
     top.addWidget(caption)
     top.addStretch()
-    window.theme_controls = QButtonGroup(window)
-    for index, name in enumerate(["Day", "Night"]):
-        theme = QPushButton(name)
-        theme.setProperty("nav", True)
-        theme.setCheckable(True)
-        theme.setAccessibleName(name + " mode")
-        theme.setToolTip("Use " + name.lower() + " mode")
-        window.theme_controls.addButton(theme, index)
-        top.addWidget(theme)
-    window.theme_controls.button(int(QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark)).setChecked(True)
     window.mode_label = QLabel("Manual mode")
     window.mode_label.setObjectName("mode")
     top.addWidget(window.mode_label)
@@ -447,7 +441,7 @@ def build_ui(window):
 
     history = window.pages.widget(2).layout()
     window.history_table = table(["ID", "Original file", "Destination", "State", "Details"])
-    for col, width in enumerate([56, 250, 250, 100, 250]):
+    for col, width in enumerate([56, 210, 210, 96, 225]):
         window.history_table.setColumnWidth(col, width)
     history.addWidget(window.history_table, 1)
     window.history_empty = QLabel("No moves yet\n\nCompleted moves appear here so you can review or undo them.")
@@ -476,6 +470,17 @@ def build_ui(window):
     settings_scroll.setWidgetResizable(True)
     settings_scroll.setWidget(settings_content)
     window.pages.widget(3).layout().addWidget(settings_scroll)
+    appearance = QLabel("APPEARANCE")
+    appearance.setProperty("muted", True)
+    settings.addWidget(appearance)
+    window.night_mode = switch("Night mode")
+    window.night_mode.setChecked(QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark)
+    window.night_mode.setToolTip("Off for Day mode; on for Night mode. Your choice is remembered.")
+    settings.addWidget(window.night_mode)
+    theme_help = QLabel("Turn off for Day mode. Your choice is remembered.")
+    theme_help.setProperty("muted", True)
+    theme_help.setWordWrap(True)
+    settings.addWidget(theme_help)
     window.tray_mode = switch("Keep running when the window closes")
     window.tray_mode.setEnabled(QSystemTrayIcon.isSystemTrayAvailable())
     window.tray_mode.setToolTip("Without a system tray, closing exits safely.")

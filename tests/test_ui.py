@@ -192,6 +192,7 @@ class DesktopFlowTest(unittest.TestCase):
     def test_day_night_choice_persists_and_history_displays_local_time(self):
         from datetime import datetime
         from PySide6.QtGui import QPalette
+        from organizer.ui import RuleDialog
         from organizer.moves import Journal
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -200,12 +201,18 @@ class DesktopFlowTest(unittest.TestCase):
             window.refresh()
             proposals = list(window.proposals)
             for mode, color in [(1, "#151a24"), (0, "#f6f8fc"), (1, "#151a24")]:
-                window.theme_controls.button(mode).click()
+                window.night_mode.setChecked(bool(mode))
                 self.assertEqual(window.palette().color(QPalette.Window).name(), color)
                 self.assertEqual(window.proposals, proposals)
+                dialog = RuleDialog(window, window.read_rules()[0])
+                dialog.contains.ensurePolished()
+                self.assertEqual(dialog.contains.palette().color(QPalette.PlaceholderText).name(),
+                                 "#adb9cf" if mode else "#58677f")
+                dialog.close()
+            self.assertTrue(window.pages.widget(3).isAncestorOf(window.night_mode))
             window.close()
             restarted = Window(root / "data")
-            self.assertEqual(restarted.theme_controls.checkedId(), 1)
+            self.assertTrue(restarted.night_mode.isChecked())
             self.assertEqual(restarted.palette().color(QPalette.Window).name(), "#151a24")
             recorded = 1791283200
             with Journal(root / "data" / "history.db") as journal:
@@ -220,6 +227,13 @@ class DesktopFlowTest(unittest.TestCase):
             for table in (restarted.files, restarted.rules, restarted.history_table):
                 self.assertTrue(table.showGrid())
                 self.assertEqual(table.horizontalHeader().defaultAlignment(), Qt.AlignLeft | Qt.AlignVCenter)
+            restarted.resize(900, 620)
+            restarted.show_page(2)
+            restarted.show()
+            APP.processEvents()
+            header = restarted.history_table.horizontalHeader()
+            self.assertLessEqual(header.sectionViewportPosition(4) + header.sectionSize(4),
+                                 restarted.history_table.viewport().width())
             restarted.close()
 
     def test_no_tray_fallback_and_single_instance_lock(self):

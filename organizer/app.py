@@ -93,7 +93,7 @@ class Window(QMainWindow):
                 self.tray_mode.setChecked(options.get("tray", False))
                 self.update_notifications.setChecked(options.get("update_notifications", False))
                 if "night_mode" in options:
-                    self.theme_controls.button(int(options["night_mode"])).setChecked(True)
+                    self.night_mode.setChecked(options["night_mode"])
                     apply_theme(self)
             except ValueError as error:
                 self.status.setText(str(error) + " Original settings were preserved.")
@@ -103,7 +103,7 @@ class Window(QMainWindow):
         self.automatic.toggled.connect(self.update_ui)
         self.tray_mode.toggled.connect(self.save)
         self.update_notifications.toggled.connect(self.toggle_updates)
-        self.theme_controls.idClicked.connect(self.set_theme)
+        self.night_mode.toggled.connect(self.set_theme)
         try:
             self.login_start.setChecked(startup_enabled())
         except (OSError, ImportError, RuntimeError) as error:
@@ -271,7 +271,7 @@ class Window(QMainWindow):
     def options(self):
         return {"automatic": self.automatic.isChecked(), "tray": self.tray_mode.isChecked(),
                 "tour_done": self.tour_done, "update_notifications": self.update_notifications.isChecked(),
-                "night_mode": self.theme_controls.checkedId() == 1}
+                "night_mode": self.night_mode.isChecked()}
 
     def load_history(self, recover=False):
         deferred = False
