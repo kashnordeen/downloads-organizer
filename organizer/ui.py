@@ -1,13 +1,12 @@
 """Focused native Qt layout and the shared blue color palette."""
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
+from PySide6.QtCore import Qt, QSize, QPoint, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QIcon, QPalette, QColor, QFontDatabase
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QLineEdit, QMessageBox,
     QHeaderView, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget,
-    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon, QProgressBar, QScrollArea,
-    QGraphicsOpacityEffect)
+    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon, QProgressBar, QScrollArea)
 
 from .core import Rule
 
@@ -199,6 +198,7 @@ def apply_theme(window, scheme=None):
     window.setStyleSheet(f"""
         QWidget {{ color: {ink}; font-size: 15px; }}
         QMainWindow, QDialog, QWidget#workspace {{ background: {bg}; }}
+        QStackedWidget#pages, QWidget[organizerPage="true"] {{ background: {bg}; }}
         QWidget#settingsContent, QScrollArea {{ background: {bg}; }}
         QFrame#folderCard, QFrame#operation {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
         QFrame#topnav {{ background: {surface}; border-bottom: 1px solid {border}; }}
@@ -259,7 +259,16 @@ def apply_theme(window, scheme=None):
         QScrollBar::add-line, QScrollBar::sub-line {{ width: 0; height: 0; }}
         QScrollBar::add-page, QScrollBar::sub-page {{ background: transparent; }}
         QToolTip {{ background: {surface}; color: {ink}; border: 1px solid {border}; padding: 6px; }}
+        QMenu {{ background: {surface}; color: {ink}; border: 1px solid {border}; padding: 6px; }}
+        QMenu::item {{ background: transparent; color: {ink}; padding: 8px 16px; }}
+        QMenu::item:selected {{ background: {accent}; color: {onaccent}; }}
+        QMenu::item:disabled {{ color: {muted}; }}
+        QMenu::separator {{ height: 1px; background: {divider}; margin: 6px; }}
     """)
+    if hasattr(window, "tray") and window.tray.contextMenu() is not None:
+        menu_palette = QPalette(palette)
+        menu_palette.setColor(QPalette.Window, QColor(surface))
+        window.tray.contextMenu().setPalette(menu_palette)
 
 
 def build_ui(window):
@@ -288,23 +297,24 @@ def build_ui(window):
     nav_layout.addStretch()
     window.navigation = QButtonGroup(window)
     window.pages = QStackedWidget()
-    window.page_opacity = QGraphicsOpacityEffect(window.pages)
-    window.page_opacity.setOpacity(1.0)
-    window.page_opacity.setEnabled(False)
-    window.pages.setGraphicsEffect(window.page_opacity)
-    window.page_animation = QPropertyAnimation(window.page_opacity, b"opacity", window)
+    window.pages.setObjectName("pages")
+    window.pages.setAttribute(Qt.WA_StyledBackground, True)
+    window.page_animation = QPropertyAnimation(window)
+    window.page_animation.setPropertyName(b"pos")
     window.page_animation.setDuration(160)
-    window.page_animation.setStartValue(.65)
-    window.page_animation.setEndValue(1.0)
+    window.page_animation.setStartValue(QPoint(0, 6))
+    window.page_animation.setEndValue(QPoint(0, 0))
     window.page_animation.setEasingCurve(QEasingCurve.OutCubic)
-    window.page_animation.finished.connect(lambda: window.page_opacity.setEnabled(False))
 
     def animate_page(_):
         window.page_animation.stop()
-        window.page_opacity.setOpacity(1.0)
-        window.page_opacity.setEnabled(False)
+        previous = window.page_animation.targetObject()
+        if previous is not None:
+            previous.move(0, 0)
+        page = window.pages.currentWidget()
+        page.move(0, 0)
         if window.isVisible() and QApplication.isEffectEnabled(Qt.UI_AnimateMenu):
-            window.page_opacity.setEnabled(True)
+            window.page_animation.setTargetObject(page)
             window.page_animation.start()
 
     window.pages.currentChanged.connect(animate_page)
@@ -391,6 +401,8 @@ def build_ui(window):
     window.operation_panel.hide()
     for _ in range(4):
         page = QWidget()
+        page.setProperty("organizerPage", True)
+        page.setAttribute(Qt.WA_StyledBackground, True)
         layout = QVBoxLayout(page)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)

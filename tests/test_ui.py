@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QTimer, Qt, QAbstractAnimation
+from PySide6.QtCore import QTimer, Qt, QPoint, QAbstractAnimation
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 from organizer.app import Window
 
@@ -158,19 +158,53 @@ class DesktopFlowTest(unittest.TestCase):
             window.remove_rule()
             self.assertEqual(numbers(), list(range(1, window.rules.rowCount() + 1)))
             with patch.object(QApplication, "isEffectEnabled", return_value=True):
-                for index in [1, 3, 2, 0, 1]:
-                    window.navigation.button(index).click()
-                    self.assertEqual(window.pages.currentIndex(), index)
-                    self.assertEqual(window.page_animation.state(), QAbstractAnimation.Running)
-                    self.assertTrue(window.navigation.button(index).isEnabled())
-                self.wait_until(lambda: window.page_animation.state() == QAbstractAnimation.Stopped)
-                self.assertEqual(window.page_opacity.opacity(), 1.0)
-                self.assertFalse(window.page_opacity.isEnabled())
+                for mode, background in [(False, "#f6f8fc"), (True, "#151a24"), (False, "#f6f8fc")]:
+                    window.night_mode.setChecked(mode)
+                    window.show_page(0)
+                    for index in [1, 3, 2, 0, 1]:
+                        window.navigation.button(index).click()
+                        self.assertEqual(window.pages.currentIndex(), index)
+                        self.assertEqual(window.page_animation.state(), QAbstractAnimation.Running)
+                        self.assertTrue(window.navigation.button(index).isEnabled())
+                        self.assertIsNone(window.pages.graphicsEffect())
+                        self.assertEqual(sum(window.pages.widget(page).isVisible() for page in range(4)), 1)
+                        self.assertEqual(window.pages.grab().toImage().pixelColor(3, 3).name(), background)
+                    self.wait_until(lambda: window.page_animation.state() == QAbstractAnimation.Stopped)
+                    self.assertEqual(window.pages.currentWidget().pos(), QPoint(0, 0))
+                    self.assertTrue(window.pages.currentWidget().testAttribute(Qt.WA_StyledBackground))
             with patch.object(QApplication, "isEffectEnabled", return_value=False):
                 window.show_page(3)
                 self.assertEqual(window.page_animation.state(), QAbstractAnimation.Stopped)
-                self.assertEqual(window.page_opacity.opacity(), 1.0)
-                self.assertFalse(window.page_opacity.isEnabled())
+                self.assertEqual(window.pages.currentWidget().pos(), QPoint(0, 0))
+            window.close()
+
+    def test_tray_menu_uses_theme_background_and_readable_selection(self):
+        from PySide6.QtGui import QPalette
+        with tempfile.TemporaryDirectory() as directory:
+            window = Window(Path(directory).resolve() / "data")
+            menu = window.tray.contextMenu()
+            for mode, surface, ink, accent, selected in [
+                    (False, "#ffffff", "#17243b", "#2457d6", "#ffffff"),
+                    (True, "#1d2431", "#f1f5fc", "#a8c8ff", "#10264e"),
+                    (False, "#ffffff", "#17243b", "#2457d6", "#ffffff")]:
+                window.night_mode.setChecked(mode)
+                menu.ensurePolished()
+                self.assertEqual(menu.palette().color(QPalette.Window).name(), surface)
+                self.assertEqual(menu.palette().color(QPalette.WindowText).name(), ink)
+                menu.popup(QPoint(30, 30))
+                APP.processEvents()
+                menu.setActiveAction(menu.actions()[0])
+                APP.processEvents()
+                image = menu.grab().toImage()
+                scale = image.devicePixelRatio()
+                self.assertEqual(image.pixelColor(int(3 * scale), int(3 * scale)).name(), surface)
+                row = menu.actionGeometry(menu.actions()[0])
+                self.assertEqual(image.pixelColor(int((row.left() + 2) * scale),
+                                                  int(row.center().y() * scale)).name(), accent)
+                colors = {image.pixelColor(x, y).name() for x in range(int(row.left() * scale), int(row.right() * scale))
+                          for y in range(int(row.top() * scale), int(row.bottom() * scale))}
+                self.assertIn(selected, colors)
+                menu.close()
             window.close()
 
     def test_tab_focus_keeps_geometry_and_keyboard_navigation(self):

@@ -75,6 +75,7 @@ class Window(QMainWindow):
         self.tray = QSystemTrayIcon(self.windowIcon(), self)
         self.tray.setToolTip("Downloads Organizer")
         menu = QMenu(self)
+        menu.setPalette(self.palette())
         menu.addAction("Show organizer", self.show_window)
         self.pause_action = menu.addAction("Resume automatic sorting", lambda: self.automatic.setChecked(not self.automatic.isChecked()))
         menu.addAction("Quit", self.request_quit)
