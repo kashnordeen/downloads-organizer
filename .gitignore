@@ -1,4 +1,5 @@
 __pycache__/
+graphify-out/
 *.pyc
 .venv/
 *.egg-info/

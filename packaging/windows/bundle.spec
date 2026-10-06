@@ -31,7 +31,7 @@ distribution = COLLECT(executable, analysis.binaries, analysis.datas,
 if sys.platform == "darwin":
     app = BUNDLE(distribution, name="Downloads Organizer.app",
         icon=str(root / "packaging/windows/Assets/Organizer.icns"),
-        bundle_identifier="local.downloadsorganizer", version="1.0.0",
+        bundle_identifier="local.downloadsorganizer", version="1.1.0",
         info_plist={"NSHighResolutionCapable": True,
                     "NSDownloadsFolderUsageDescription": "Organize the Downloads folder you select.",
                     "NSDocumentsFolderUsageDescription": "Organize files in a folder you select."})

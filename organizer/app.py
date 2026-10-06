@@ -26,6 +26,10 @@ class MoveWorker(QThread):
         try:
             with Journal(self.data_dir / "history.db", cancelled=self.isInterruptionRequested,
                          progress=lambda path, phase, done, total: self.progress.emit(path.name, phase, done, total)) as journal:
+                if self.proposals == "recover":
+                    journal.recover()
+                    self.report.emit("Recovery checked. Refresh Preview to review current files.")
+                    return
                 if isinstance(self.proposals, int):
                     restored = journal.undo(self.proposals)
                     self.report.emit(f"Restored {restored}")
@@ -259,10 +263,11 @@ class Window(QMainWindow):
                 "tour_done": self.tour_done, "update_notifications": self.update_notifications.isChecked()}
 
     def load_history(self, recover=False):
+        deferred = False
         try:
             with Journal(self.data_dir / "history.db") as journal:
                 if recover:
-                    journal.recover()
+                    deferred = journal.recover(verify=False)
                 history = journal.history()
             self.history_table.setRowCount(len(history))
             for row, operation in enumerate(history):
@@ -277,6 +282,8 @@ class Window(QMainWindow):
             self.status.setText(f"History unavailable: {error}")
         self.update_ui()
         self.update_history_actions()
+        if deferred and not self.automatic.isChecked():
+            self.start_worker("recover")
 
     def update_history_actions(self):
         row = self.history_table.currentRow()
@@ -486,13 +493,6 @@ class Window(QMainWindow):
         if folder:
             self.set_folder(folder)
 
-    def choose_destination(self):
-        row = self.rules.currentRow()
-        if row >= 0:
-            folder = QFileDialog.getExistingDirectory(self, "Choose destination")
-            if folder:
-                self.rules.item(row, 4).setText(folder)
-
     def remove_rule(self):
         row = self.rules.currentRow()
         if row >= 0:
@@ -521,7 +521,7 @@ class Window(QMainWindow):
         try:
             self.proposals = preview(self.folder, self.read_rules())
             with Journal(self.data_dir / "history.db") as journal:
-                journal.recover()
+                deferred = journal.recover(verify=False)
                 kept = journal.kept_sources()
                 blocked = journal.unresolved_sources()
             for proposal in self.proposals:
@@ -544,6 +544,8 @@ class Window(QMainWindow):
             self.status.setText(f"{count} files match your rules. No files were moved.")
             self.organize.setEnabled(count > 0 and not self.automatic.isChecked()
                                      and not (self.monitor and self.monitor.isRunning()))
+            if deferred and not self.automatic.isChecked():
+                self.start_worker("recover")
         except (ValueError, OSError) as error:
             self.proposals = []
             self.files.setRowCount(0)

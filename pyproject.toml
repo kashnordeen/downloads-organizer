@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "local-downloads-organizer"
-version = "1.0.0"
+version = "1.1.0"
 description = "Local desktop file organizer with preview and recoverable moves"
 readme = "README.md"
 license = "MIT"

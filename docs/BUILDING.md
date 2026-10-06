@@ -45,6 +45,12 @@ location. Linux package upgrades replace `/opt/downloads-organizer`; per-user
 settings/history stay separate. Uninstalling these packages does not delete
 organized files or the app's per-user settings/history.
 
+From 1.1.0, optional update notices link to this project's stable GitHub release.
+The installer is downloaded and run by the user; there is no silent installation.
+Users on 1.0.0 must manually install a newer version once. Keep the Windows AppId,
+macOS bundle identifier, and Qt organization/application names unchanged when
+building an upgrade so existing installations and per-user data remain associated.
+
 Disable **Start at login** before uninstalling, or before moving a portable app.
 For portable upgrades, extract the replacement into its final location, then
 enable startup again. No startup entry is created by an installer; it is an

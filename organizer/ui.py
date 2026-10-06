@@ -192,6 +192,7 @@ def apply_theme(window, scheme=None):
     window.setStyleSheet(f"""
         QWidget {{ color: {ink}; font-size: 14px; }}
         QMainWindow, QDialog, QWidget#workspace {{ background: {bg}; }}
+        QWidget#settingsContent, QScrollArea {{ background: {bg}; }}
         QFrame#folderCard, QFrame#operation {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
         QFrame#topnav {{ background: {surface}; border-bottom: 1px solid {border}; }}
         QLabel#brand {{ font-size: 16px; font-weight: 600; }}
@@ -219,9 +220,9 @@ def apply_theme(window, scheme=None):
         QLineEdit {{ background: {surface}; color: {ink}; border: 2px solid {accent}; padding: 4px; }}
         QCheckBox {{ spacing: 10px; padding: 7px 0; border: 1px solid transparent; border-radius: 4px; }}
         QCheckBox:focus {{ border-color: {accent}; }}
-        QCheckBox::indicator, QTableView::indicator {{ width: 18px; height: 18px;
+        QCheckBox::indicator {{ width: 18px; height: 18px;
             background: {surface}; border: 1px solid {muted}; border-radius: 4px; }}
-        QCheckBox::indicator:checked, QTableView::indicator:checked {{
+        QCheckBox::indicator:checked {{
             background: {accent}; border-color: {accent}; image: url("{check}"); }}
         QCheckBox:disabled {{ color: {muted}; }}
         QCheckBox[switch="true"]::indicator {{ width: 36px; height: 20px; border-radius: 11px;
@@ -229,6 +230,9 @@ def apply_theme(window, scheme=None):
         QCheckBox[switch="true"]::indicator:checked {{ background: {accent}; border-color: {accent};
             image: url("{assets}/switch-on.svg"); }}
         QCheckBox[switch="true"]::indicator:disabled {{ background: {border}; border-color: {border}; }}
+        QTableView::indicator {{ width: 36px; height: 20px; border-radius: 11px;
+            background: {muted}; border: 1px solid {muted}; image: url("{assets}/switch-off.svg"); }}
+        QTableView::indicator:checked {{ background: {accent}; border-color: {accent}; image: url("{assets}/switch-on.svg"); }}
         QProgressBar {{ background: {soft}; border: none; border-radius: 4px; min-height: 8px; max-height: 8px; }}
         QProgressBar::chunk {{ background: {accent}; border-radius: 4px; }}
         QLabel#operationTitle {{ font-weight: 600; }}
@@ -424,6 +428,7 @@ def build_ui(window):
     window.history_table.itemSelectionChanged.connect(window.update_history_actions)
 
     settings_content = QWidget()
+    settings_content.setObjectName("settingsContent")
     settings = QVBoxLayout(settings_content)
     settings.setContentsMargins(0, 0, 12, 0)
     settings.setSpacing(12)

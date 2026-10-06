@@ -126,6 +126,17 @@ class OrganizerTests(unittest.TestCase):
             self.assertEqual(journal.history()[0][3], "complete")
             self.assertEqual(proposal.destination.read_bytes(), b"important data")
 
+    def test_ui_recovery_defers_large_verification_to_worker(self):
+        proposal = self.ready_proposal()
+        with Journal(self.root / "recovery.db") as journal:
+            journal.move(proposal)
+            journal.update(1, state="published")
+            with patch("organizer.moves.digest", side_effect=AssertionError("UI must not hash files")):
+                self.assertTrue(journal.recover(verify=False))
+            self.assertEqual(journal.history()[0][3], "published")
+            journal.recover()
+            self.assertEqual(journal.history()[0][3], "complete")
+
     def test_interrupted_move_with_original_only_is_safe_to_retry(self):
         proposal = self.ready_proposal()
         with Journal(self.root / "history.db") as journal:
@@ -245,7 +256,10 @@ class OrganizerTests(unittest.TestCase):
                     if phase == "Final check":
                         self.assertEqual(proposal.destination.read_bytes(), content)
                         self.assertEqual(journal.history()[0][3], "review")
-                        proposal.destination.unlink()
+                        journal.cancelled = None
+                        journal.progress = None
+                        journal.resolve_review(journal.history()[0][0], "keep")
+                        self.assertFalse(proposal.destination.exists())
                     else:
                         self.assertFalse(proposal.destination.exists())
                         self.assertEqual(journal.unresolved_sources(), set())

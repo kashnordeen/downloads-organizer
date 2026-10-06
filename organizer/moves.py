@@ -167,7 +167,8 @@ class Journal:
             try:
                 if temp is not None:
                     safe_path(temp).unlink(missing_ok=True)
-                self.update(operation, state=state, temp="", error=detail)
+                saved = {"signature": json.dumps(signature(candidate))} if published else {}
+                self.update(operation, state=state, temp="", error=detail, **saved)
             except (OSError, ValueError) as cleanup_error:
                 self.update(operation, state="review", error=f"{detail}; cleanup pending: {cleanup_error}")
             raise OperationCancelled(detail) from error
@@ -233,7 +234,8 @@ class Journal:
                     pass
         return target if state == "complete" else source
 
-    def recover(self):
+    def recover(self, verify=True):
+        deferred = False
         rows = self.db.execute("""SELECT id,source,destination,hash,signature,temp,undo_of,error
             FROM operations WHERE state IN ('pending','published','review','keep_pending')""").fetchall()
         for operation, source, destination, expected, saved, temp, undo_of, error in rows:
@@ -261,6 +263,9 @@ class Journal:
                               "destination is absent. Refresh Preview to retry.")
                     self.update(operation, state="retryable", error=detail)
                     continue
+                if not verify and not original.exists() and target.is_file():
+                    deferred = True
+                    continue
                 if (not original.exists() and not original.is_symlink() and target.is_file()
                         and signature(target)[:4] == tuple(json.loads(saved))[:4] and self.digest(target, "Recovering") == expected):
                     self.update(operation, state="complete", error="")
@@ -270,3 +275,4 @@ class Journal:
                     self.update(operation, state="review", error="Interrupted operation: files retained; inspect paths before acting")
             except (OSError, ValueError, TypeError) as error:
                 self.update(operation, state="review", error=str(error))
+        return deferred

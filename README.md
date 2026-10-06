@@ -8,7 +8,7 @@
 
 Preview file moves, build your own rules, and let a local desktop app handle the routine sorting—with history and safe undo.
 
-![Version](https://img.shields.io/badge/version-1.0.0-2457d6?style=flat-square)
+![Version](https://img.shields.io/badge/development-1.1.0-2457d6?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.12%E2%80%933.14-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Qt](https://img.shields.io/badge/Qt-6.11.2-41CD52?style=flat-square&logo=qt&logoColor=white)
 [![MIT license](https://img.shields.io/badge/license-MIT-2457d6?style=flat-square)](LICENSE)
@@ -33,6 +33,8 @@ Preview file moves, build your own rules, and let a local desktop app handle the
 | **Background sorting** | Keep the app in the system tray; optionally start it at login. |
 | **History and undo** | Restore unchanged files, or resolve reviewed moves by moving to the destination or leaving the file in Downloads. |
 | **A focused workspace** | Separate Preview, Rules, History, and Settings pages, with blue light/dark themes. |
+| **Visible progress and cancellation** | See the current file, phase, percentage, and bytes. Cancel stops remaining files and interrupts copying and hashing. |
+| **Optional update notices** | Check stable GitHub releases on startup or manually. You choose when to download and install. |
 
 No account, cloud service, telemetry, or administrator privileges are required for normal operation. Python is included in the downloads.
 
@@ -45,6 +47,8 @@ No account, cloud service, telemetry, or administrator privileges are required f
 | **Linux x64** | Debian/Ubuntu package and portable tar.gz. CI tests on Ubuntu 22.04; native display libraries and glibc 2.34+ required. |
 
 Version **1.0.0** is the first stable release. Windows builds are unsigned; macOS builds are ad-hoc signed but lack Developer ID signing and notarization. OS security policies may warn or block installation. Earlier OS versions, real desktop tray/login/reboot behavior on macOS/Linux, and signed installation remain manual validation tasks. See [installation guidance](docs/BUILDING.md).
+
+The source branch prepares **1.1.0** with the redesigned interface, progress, cancellation, and update notices. These features reach existing users after they install the new version; the 1.0.0 download does not contain them.
 
 ## Get started
 
@@ -92,13 +96,19 @@ Use a supported Python version. On Linux, install the display libraries required
 4. **Organize files.** Confirm the manual move, or enable automatic sorting after reviewing your rules.
 5. **Review History.** Select a completed move to undo. If a row says **review**, select it and choose **Move to destination** or **Leave in Downloads**. The app verifies copies before changing either file. A file left in Downloads is skipped on future scans unless it changes.
 
-Switch pages with the sidebar or **Alt+1** through **Alt+4**. Resize table columns or hover over a path to read it in full. Navigation preserves the current preview and automatic monitoring. Editing rules or changing the watched folder pauses sorting and invalidates the preview.
+Switch pages with the top navigation or **Alt+1** through **Alt+4**. Resize table columns or hover over a path to read it in full. Double-click a rule to open its editor. Navigation preserves the current preview and automatic monitoring. Editing rules or changing the watched folder pauses sorting and invalidates the preview.
+
+During a move, the progress area shows **Checking**, **Copying**, disk flushing, verification, and **Finishing**. Percentages and byte counts refer to the current phase, not the entire batch. **Cancel** stops remaining files; completed moves remain in History and can be undone. If a destination copy was already published, cancellation keeps both copies for review. Disk flushes and individual operating-system calls must return before cancellation finishes; the interface remains usable while waiting. Final journal/removal steps finish safely.
 
 ### When the window closes
 
 With **Keep running in the tray** enabled and a usable tray available, closing the window keeps the app running. The tray menu offers Show, Pause/Resume, and Quit. Without a usable tray, closing exits safely.
 
-**Quit app** finishes the current file before stopping. Automatic mode remains saved, so reopening catches up on downloads created during the stopped period. **Start at login** is optional and respects operating-system disablement.
+**Quit app** requests a safe stop before exiting. Automatic mode remains saved, so reopening catches up on downloads created during the stopped period. Cancelling an automatic operation pauses automatic mode. **Start at login** is optional and respects operating-system disablement.
+
+### Updates
+
+Update checks start off. Enable **Notify me about updates when the app starts**, or use **Check for updates** for a one-time check. The app checks the latest stable release and displays a **View update** notice. It opens this project's official GitHub release page; it never downloads or runs an installer automatically. Quit the app and install the replacement over the existing version—no uninstall is required. Settings and history stay in their existing per-user location. Users of 1.0.0 need one manual upgrade to receive this feature.
 
 ## Safety and privacy
 
@@ -111,6 +121,8 @@ With **Keep running in the tray** enabled and a usable tray available, closing t
 Readiness uses file age and, in automatic mode, stable metadata observed across scans at least two seconds apart. This cannot prove every download is complete. Avoid files actively modified by other programs: an external writer can race the final source check/removal. Copying requires temporary disk space; filesystems without hard-link support fail safely and retain the source/recovery copy. SHA-256 verifies content, not arbitrary extended metadata.
 
 Settings and SQLite history use Qt's per-user application data location under **LocalOrganizer / DownloadsOrganizer**. No file data is sent to a server. Interrupted operations may leave hidden `.organizer-*.tmp` files for manual review.
+
+Optional update checks contact GitHub over HTTPS; GitHub receives the IP address and app version in the request. Files, filenames, rules, paths, and history are never transmitted. With checks off, the organizer needs no network connection. Opening a release page uses your normal browser.
 
 ## Inside the app
 
@@ -134,6 +146,7 @@ flowchart LR
 | [`worker.py`](organizer/worker.py) | Startup backlog priority, readiness tracking, notifications, and rescans. |
 | [`moves.py`](organizer/moves.py) | Verified copying, collision handling, journal recovery, and undo. |
 | [`startup.py`](organizer/startup.py) | Optional per-user startup and Windows packaged startup APIs. |
+| [`updates.py`](organizer/updates.py) | Optional, bounded release checks and trusted release-page links. |
 
 ## Development and verification
 
