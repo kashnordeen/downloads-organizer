@@ -1,5 +1,34 @@
 # Validation record
 
+## 1.1.0 stable release
+
+Version **1.1.0**, checked **2026-10-06**, uses packages from the
+[desktop build](https://github.com/kashnordeen/downloads-organizer/actions/runs/37481666269)
+for commit `56c4cfe09d916fbe4ddc1f3f4bbf2d23a090bcc0`. All four release
+targets passed tests, dependency audits, bundled-runtime checks and packaging.
+Windows passed installation, repeat installation/upgrade, uninstall and
+user-data retention checks. Linux passed package installation and runtime checks;
+macOS passed app/DMG generation and ad-hoc signature integrity checks.
+
+The Windows source suite discovered **47 tests: 46 passed and one existing
+symlink-privilege check was skipped**. Added checks cover interrupted moves,
+copy/hash cancellation, retained published copies, responsive navigation,
+optional update notices, timestamp migration, saved themes, rule numbering,
+rapid tab switches and rendered tray-menu contrast.
+
+Native Windows captures checked all four pages during and after transitions
+at 900×620 and 1180×760, in Day, Night and Night → Day. Repeated switching
+while refreshing 200 isolated History rows showed a single clean page.
+Tray menus were checked with the window shown and hidden. The opacity effect
+was removed; opaque pages retain a short slide when desktop effects are enabled.
+These checks used demonstration files and did not change real Downloads or
+startup registration.
+
+Packages remain unsigned on Windows and ad-hoc signed without notarization
+on macOS. See [signing status](docs/SIGNING.md). The release includes combined
+SHA-256 checksums and corresponding dependency sources; earlier platform and
+filesystem limits below still apply.
+
 ## 1.0.0 stable release
 
 Version **1.0.0**, checked **2026-10-03**, was built from merged commit

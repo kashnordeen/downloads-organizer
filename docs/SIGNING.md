@@ -2,7 +2,7 @@
 
 ## Current status
 
-Windows v1.0.0 downloads are unsigned. SignPath Foundation approval,
+Windows v1.1.0 downloads are unsigned. SignPath Foundation approval,
 account configuration, and signing integration are pending. This document does
 not claim sponsorship, certification, or that any existing download is signed.
 macOS Developer ID signing and notarization are separate requirements.

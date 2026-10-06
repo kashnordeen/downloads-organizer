@@ -8,13 +8,13 @@
 
 Preview file moves, build your own rules, and let a local desktop app handle the routine sorting—with history and safe undo.
 
-![Version](https://img.shields.io/badge/development-1.1.0-2457d6?style=flat-square)
+![Version](https://img.shields.io/badge/release-1.1.0-2457d6?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.12%E2%80%933.14-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Qt](https://img.shields.io/badge/Qt-6.11.2-41CD52?style=flat-square&logo=qt&logoColor=white)
 [![MIT license](https://img.shields.io/badge/license-MIT-2457d6?style=flat-square)](LICENSE)
 ![Local](https://img.shields.io/badge/files-stay_local-2457d6?style=flat-square)
 
-[Download 1.0.0](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.0.0) · [How it works](#daily-use) · [Build and install](docs/BUILDING.md) · [Validation](VALIDATION.md)
+[Download 1.1.0](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.1.0) · [How it works](#daily-use) · [Build and install](docs/BUILDING.md) · [Validation](VALIDATION.md)
 
 <img src="docs/media/workspace-tour.gif" width="1000" alt="Animated tour of the real Downloads Organizer: preview demo downloads, edit rules, review move history, and open settings">
 
@@ -46,13 +46,20 @@ No account, cloud service, telemetry, or administrator privileges are required f
 | **macOS Intel / Apple Silicon** | Separate x64 and arm64 DMGs with app bundles. CI tests on macOS 15. |
 | **Linux x64** | Debian/Ubuntu package and portable tar.gz. CI tests on Ubuntu 22.04; native display libraries and glibc 2.34+ required. |
 
-Version **1.0.0** is the first stable release. Windows builds are unsigned; macOS builds are ad-hoc signed but lack Developer ID signing and notarization. OS security policies may warn or block installation. Earlier OS versions, real desktop tray/login/reboot behavior on macOS/Linux, and signed installation remain manual validation tasks. See [installation guidance](docs/BUILDING.md).
+Version **1.1.0** is the current stable release. Windows builds are unsigned; macOS builds are ad-hoc signed but lack Developer ID signing and notarization. OS security policies may warn or block installation. Earlier OS versions, real desktop tray/login/reboot behavior on macOS/Linux, and signed installation remain manual validation tasks. See [installation guidance](docs/BUILDING.md).
 
-The source branch prepares **1.1.0** with the redesigned interface, progress, cancellation, and update notices. These features reach existing users after they install the new version; the 1.0.0 download does not contain them.
+**New in 1.1.0:** a redesigned interface, progress and safe cancellation, optional update notices, saved Day/Night appearance, rule priority numbers and history timestamps. Tab transitions and the tray menu now render clearly in both themes. Quit the running app and install over your current version; settings and history are retained. Update notices are available from 1.1.0; users on 1.0.0 should download this release manually.
 
 ## Get started
 
-[Download 1.0.0 for your OS](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.0.0), install it, and open **Downloads Organizer**. Confirm the folder on first launch, follow the guided tour, and refresh Preview. Nothing moves until you confirm a manual move or enable automatic sorting.
+[Download 1.1.0 for your OS](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.1.0), install it, and open **Downloads Organizer**. Confirm the folder on first launch, follow the guided tour, and refresh Preview. Nothing moves until you confirm a manual move or enable automatic sorting.
+
+| Download | Package |
+| :--- | :--- |
+| Windows x64 | [Setup installer](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-windows-x64-setup.exe) · [Portable ZIP](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-windows-x64-portable.zip) |
+| macOS Apple Silicon | [arm64 DMG](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-macos-arm64-unsigned.dmg) |
+| macOS Intel | [x64 DMG](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-macos-x64-unsigned.dmg) |
+| Linux x64 | [Debian/Ubuntu package](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-linux-x64.deb) · [Portable archive](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-linux-x64-portable.tar.gz) |
 
 Windows Setup creates a Start-menu shortcut. On macOS, drag the app from the DMG to Applications before launching. On Ubuntu/Debian, install the `.deb` with the package installer. Portable downloads are also available for Windows/Linux. [Full instructions and upgrades](docs/BUILDING.md).
 
