@@ -14,11 +14,11 @@ Preview file moves, build your own rules, and let a local desktop app handle the
 [![MIT license](https://img.shields.io/badge/license-MIT-2457d6?style=flat-square)](LICENSE)
 ![Local](https://img.shields.io/badge/files-stay_local-2457d6?style=flat-square)
 
-[Download 1.1.0](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.1.0) · [How it works](#daily-use) · [Build and install](docs/BUILDING.md) · [Validation](VALIDATION.md)
+[Download 1.1.0](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.1.0) · [Explore the UI](#explore-the-new-ui) · [How it works](#daily-use) · [Build and install](docs/BUILDING.md)
 
-<img src="docs/media/workspace-tour.gif" width="1000" alt="Animated tour of the real Downloads Organizer: preview demo downloads, edit rules, review move history, and open settings">
+<img src="docs/media/workspace-tour.gif" width="1000" alt="Downloads Organizer 1.1.0 animated tour: Preview, numbered Rules, timestamped History and Settings in Day and Night modes">
 
-*Actual application UI with demonstration files. The tour loops automatically.*
+*Downloads Organizer 1.1.0, captured from the real Windows app with demonstration data and redacted paths. The tour loops through both themes.*
 
 </div>
 
@@ -32,11 +32,59 @@ Preview file moves, build your own rules, and let a local desktop app handle the
 | **Automatic catch-up** | On reopening, ready files downloaded while stopped are processed before later ready arrivals. |
 | **Background sorting** | Keep the app in the system tray; optionally start it at login. |
 | **History and undo** | Restore unchanged files, or resolve reviewed moves by moving to the destination or leaving the file in Downloads. |
-| **A focused workspace** | Separate Preview, Rules, History, and Settings pages, with blue light/dark themes. |
+| **A focused workspace** | Separate Preview, Rules, History, and Settings pages, with smooth tab transitions and a saved Day/Night toggle. |
 | **Visible progress and cancellation** | See the current file, phase, percentage, and bytes. Cancel stops remaining files and interrupts copying and hashing. |
 | **Optional update notices** | Check stable GitHub releases on startup or manually. You choose when to download and install. |
 
 No account, cloud service, telemetry, or administrator privileges are required for normal operation. Python is included in the downloads.
+
+## Explore the new UI
+
+Four tabs keep each step easy to find. The selected tab has a blue underline; a dashed underline shows keyboard focus. Use **Alt+1** through **Alt+4** to switch pages.
+
+| Page | What you can do |
+| :--- | :--- |
+| **Preview** | Review file destinations before organizing. During a move, see progress and use Cancel to request a safe stop. |
+| **Rules** | Follow the numbered priority order, toggle rules, edit filters and destinations in a form, then save. |
+| **History** | Read each move's local date/time, undo unchanged files, or resolve copies marked for review. |
+| **Settings** | Choose Day/Night appearance, tray behavior, optional login startup and update notices. Scroll for more options. |
+
+**Day mode — review destinations before anything moves**
+
+<img src="docs/media/workspace-light.png" width="1000" alt="Day-mode Preview with five demo downloads, proposed category destinations and the Organize files button">
+
+<details>
+<summary><strong>Night mode and the rest of the workspace</strong></summary>
+
+**Night mode**
+
+<img src="docs/media/workspace-dark.png" width="1000" alt="Night-mode Preview with blue accents, clear table dividers and the same demonstration files">
+
+**Numbered Rules**
+
+<img src="docs/media/workspace-rules.png" width="1000" alt="Rules page with priority numbers, enabled switches, extensions, destinations and rule editing actions">
+
+**Edit a rule**
+
+<img src="docs/media/rule-editor.png" width="600" alt="Rule editor with name, extensions, optional filename filter, destination picker and Save and Cancel buttons">
+
+**History with timestamps**
+
+<img src="docs/media/workspace-history.png" width="1000" alt="History page showing demo move paths, completion states and local date and time in Details">
+
+**Appearance and preferences**
+
+<img src="docs/media/workspace-settings.png" width="1000" alt="Scrollable Settings page with Night mode, tray, login startup and optional update-notification toggles">
+
+**Tray menus follow your chosen theme**
+
+| Day mode | Night mode |
+| :---: | :---: |
+| <img src="docs/media/tray-day.png" width="275" alt="Day-mode tray menu with Show organizer, Resume automatic sorting and Quit"> | <img src="docs/media/tray-night.png" width="275" alt="Night-mode tray menu with readable text and a blue selected item"> |
+
+Screenshots use demonstration data. Personal paths are redacted, and real Downloads are untouched.
+
+</details>
 
 ## Platform status
 
@@ -103,7 +151,7 @@ Use a supported Python version. On Linux, install the display libraries required
 4. **Organize files.** Confirm the manual move, or enable automatic sorting after reviewing your rules.
 5. **Review History.** Select a completed move to undo. If a row says **review**, select it and choose **Move to destination** or **Leave in Downloads**. The app verifies copies before changing either file. A file left in Downloads is skipped on future scans unless it changes.
 
-Switch pages with the top navigation or **Alt+1** through **Alt+4**. Tabs use a short slide when desktop UI effects are enabled. Each page has an opaque background, so previous pages cannot show through during transitions. Rule row numbers show their current priority and update when rules are added, removed or reordered. Resize table columns or hover over a path to read it in full. Double-click a rule to open its editor. Navigation preserves the current preview and automatic monitoring. Editing rules or changing the watched folder pauses sorting and invalidates the preview.
+Switch pages with the top navigation or **Alt+1** through **Alt+4**. Tabs use a short slide when desktop UI effects are enabled. Rule row numbers show their current priority and update when rules are added, removed or reordered. Resize table columns or hover over a path to read it in full. Double-click a rule to open its editor. Navigation preserves the current preview and automatic monitoring. Editing rules or changing the watched folder pauses sorting and invalidates the preview.
 
 The current tab has a blue underline; a dashed underline shows focus. Larger text and stronger contrast apply throughout the workspace and dialogs.
 
