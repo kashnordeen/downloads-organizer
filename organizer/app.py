@@ -1,15 +1,17 @@
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile, QTimer, QFileSystemWatcher
+from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile, QTimer, QFileSystemWatcher, QUrl
 from PySide6.QtWidgets import (QApplication, QFileDialog, QMainWindow, QMessageBox,
     QTableWidgetItem, QSystemTrayIcon, QMenu)
+from PySide6.QtGui import QDesktopServices
 
 from .core import Rule, defaults, load_settings, load_options, preview, save_settings
 from .moves import Journal, OperationCancelled
 from .worker import MonitorWorker
 from .startup import set_startup, startup_enabled
 from .ui import build_ui, RuleDialog, initial_folder, guided_tour
+from .updates import UpdateWorker
 
 
 class MoveWorker(QThread):
@@ -33,10 +35,11 @@ class MoveWorker(QThread):
                     result = journal.resolve_review(operation, choice)
                     self.report.emit(f"{'Moved to destination' if choice == 'move' else 'Left in Downloads'}: {result}")
                     return
-                for proposal in self.proposals:
+                for index, proposal in enumerate(self.proposals, 1):
                     if self.isInterruptionRequested():
                         raise OperationCancelled("Cancelled; remaining files were left untouched")
                     try:
+                        self.report.emit(f"File {index} of {len(self.proposals)} · {proposal.source.name}")
                         destination = journal.move(proposal)
                         self.report.emit(f"Moved {proposal.source.name} → {destination}")
                     except (OSError, ValueError) as error:
@@ -57,6 +60,8 @@ class Window(QMainWindow):
         self.proposals = []
         self.worker = None
         self.monitor = None
+        self.update_worker = None
+        self.update_url = None
         self.quitting = False
         self.tour_done = False
         self.watcher = QFileSystemWatcher(self)
@@ -81,6 +86,7 @@ class Window(QMainWindow):
                 self.tour_done = options.get("tour_done", False)
                 self.automatic.setChecked(options.get("automatic", False))
                 self.tray_mode.setChecked(options.get("tray", False))
+                self.update_notifications.setChecked(options.get("update_notifications", False))
             except ValueError as error:
                 self.status.setText(str(error) + " Original settings were preserved.")
         self.rules.itemChanged.connect(self.invalidate)
@@ -88,6 +94,7 @@ class Window(QMainWindow):
         self.automatic.toggled.connect(self.toggle_automatic)
         self.automatic.toggled.connect(self.update_ui)
         self.tray_mode.toggled.connect(self.save)
+        self.update_notifications.toggled.connect(self.toggle_updates)
         try:
             self.login_start.setChecked(startup_enabled())
         except (OSError, ImportError, RuntimeError) as error:
@@ -97,6 +104,41 @@ class Window(QMainWindow):
         self.update_ui()
         if self.automatic.isChecked():
             QTimer.singleShot(0, lambda: self.toggle_automatic(True))
+        if self.update_notifications.isChecked():
+            QTimer.singleShot(0, self.check_updates)
+
+    def toggle_updates(self, enabled):
+        self.save()
+        if enabled:
+            self.check_updates()
+
+    def check_updates(self):
+        if self.update_worker and self.update_worker.isRunning():
+            return
+        self.check_updates_button.setEnabled(False)
+        self.update_status.setText("Checking GitHub for a stable release…")
+        self.update_worker = UpdateWorker(self)
+        self.update_worker.result.connect(self.update_result)
+        self.update_worker.failed.connect(self.update_status.setText)
+        self.update_worker.finished.connect(self.update_finished)
+        self.update_worker.start()
+
+    def update_result(self, release):
+        self.update_url = release[1] if release else None
+        self.download_update.setEnabled(bool(release))
+        self.update_banner.setVisible(bool(release))
+        message = f"Version {release[0]} is available. Install when you’re ready." if release else "You’re up to date with the latest stable release."
+        self.update_status.setText(message)
+        self.update_notice.setText(message)
+
+    def update_finished(self):
+        self.check_updates_button.setEnabled(True)
+        if self.quitting:
+            self.close()
+
+    def view_update(self):
+        if self.update_url:
+            QDesktopServices.openUrl(QUrl(self.update_url))
 
     def show_page(self, index):
         titles = ["Organize with confidence.", "Your rules. Your folders.", "Every move, accounted for.", "Make it work for you."]
@@ -208,13 +250,13 @@ class Window(QMainWindow):
         message = self.status.text()
         if self.automatic.isChecked():
             self.automatic.setChecked(False)
-        self.undo_button.setEnabled(True)
         self.invalidate()
+        self.update_history_actions()
         self.status.setText(message)
 
     def options(self):
         return {"automatic": self.automatic.isChecked(), "tray": self.tray_mode.isChecked(),
-                "tour_done": self.tour_done}
+                "tour_done": self.tour_done, "update_notifications": self.update_notifications.isChecked()}
 
     def load_history(self, recover=False):
         try:
@@ -295,6 +337,8 @@ class Window(QMainWindow):
         self.update_history_actions()
 
     def show_progress(self, name, phase, done, total):
+        if self.monitor and self.monitor.isRunning():
+            self.set_operation_busy(True)
         self.operation_panel.show()
         self.operation_label.setText(name)
         self.operation_label.setToolTip(name)
@@ -303,7 +347,7 @@ class Window(QMainWindow):
             self.progress_bar.setValue(min(100, int(done * 100 / total)))
         stopping = bool((self.worker and self.worker.isInterruptionRequested()) or
                         (self.monitor and self.monitor.isInterruptionRequested()))
-        detail = f"{phase} · {done / (1024 * 1024):,.1f} / {total / (1024 * 1024):,.1f} MB" if total else phase
+        detail = f"{phase} · {min(100, int(done * 100 / total))}% · {done / (1024 * 1024):,.1f} / {total / (1024 * 1024):,.1f} MB" if total else phase
         self.operation_detail.setText("Stopping safely… " + detail if stopping else detail)
         self.cancel_button.setText("Stopping…" if stopping else "Cancel")
         self.cancel_button.setEnabled(not stopping and phase != "Finishing")
@@ -320,6 +364,8 @@ class Window(QMainWindow):
 
     def operation_idle(self):
         self.operation_panel.hide()
+        if not (self.worker and self.worker.isRunning()):
+            self.set_operation_busy(False)
 
     def invalidate(self):
         self.proposals = []
@@ -356,13 +402,17 @@ class Window(QMainWindow):
         if self.monitor is not None and self.monitor.isRunning():
             self.quitting = True
             self.monitor.stop()
-            self.status.setText("Finishing the current file before exiting.")
+            self.status.setText("Stopping safely before exiting.")
             event.ignore()
             return
         if self.worker is not None and self.worker.isRunning():
             self.quitting = True
             self.cancel_operation()
             self.status.setText("Stopping safely before exiting.")
+            event.ignore()
+        elif self.update_worker is not None and self.update_worker.isRunning():
+            self.quitting = True
+            self.status.setText("Waiting for the update check to finish before exiting.")
             event.ignore()
         else:
             self.tray.hide()

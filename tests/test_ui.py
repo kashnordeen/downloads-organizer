@@ -51,6 +51,31 @@ class DesktopFlowTest(unittest.TestCase):
             self.assertFalse(restarted.automatic.isChecked())
             restarted.close()
 
+    def test_update_checks_are_opt_in_and_preference_survives_upgrade(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            with patch("organizer.updates.latest_release", return_value=("2.0.0", "https://github.com/kashnordeen/downloads-organizer/releases/tag/v2.0.0")) as lookup:
+                window = Window(root / "data")
+                window.set_folder(root)
+                APP.processEvents()
+                self.assertFalse(window.update_notifications.isChecked())
+                lookup.assert_not_called()
+                window.check_updates()
+                self.wait_until(lambda: not window.update_worker.isRunning())
+                APP.processEvents()
+                self.assertIn("2.0.0", window.update_status.text())
+                self.assertTrue(window.download_update.isEnabled())
+                window.update_notifications.setChecked(True)
+                self.wait_until(lambda: not window.update_worker.isRunning())
+                APP.processEvents()
+                window.close()
+                restarted = Window(root / "data")
+                self.assertTrue(restarted.update_notifications.isChecked())
+                APP.processEvents()
+                self.wait_until(lambda: restarted.update_worker is not None and not restarted.update_worker.isRunning())
+                APP.processEvents()
+                restarted.close()
+
     def test_guided_tour_visits_every_workspace_page(self):
         from organizer.ui import guided_tour
         with tempfile.TemporaryDirectory() as directory:

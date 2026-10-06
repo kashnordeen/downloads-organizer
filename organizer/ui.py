@@ -6,7 +6,7 @@ from PySide6.QtGui import QIcon, QPalette, QColor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QLineEdit, QMessageBox,
     QHeaderView, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget,
-    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon, QProgressBar)
+    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon, QProgressBar, QScrollArea)
 
 from .core import Rule
 
@@ -290,6 +290,16 @@ def build_ui(window):
     window.mode_label.setObjectName("mode")
     top.addWidget(window.mode_label)
     content.addLayout(top)
+    window.update_banner = QFrame()
+    notice = QHBoxLayout(window.update_banner)
+    notice.setContentsMargins(0, 0, 0, 0)
+    window.update_notice = QLabel()
+    window.update_notice.setWordWrap(True)
+    window.update_notice.setProperty("muted", True)
+    notice.addWidget(window.update_notice, 1)
+    notice.addWidget(button("View update", window.view_update))
+    content.addWidget(window.update_banner)
+    window.update_banner.hide()
     window.page_title = QLabel()
     window.page_title.setObjectName("pageTitle")
     content.addWidget(window.page_title)
@@ -413,7 +423,15 @@ def build_ui(window):
     history.addLayout(history_actions)
     window.history_table.itemSelectionChanged.connect(window.update_history_actions)
 
-    settings = window.pages.widget(3).layout()
+    settings_content = QWidget()
+    settings = QVBoxLayout(settings_content)
+    settings.setContentsMargins(0, 0, 12, 0)
+    settings.setSpacing(12)
+    settings_scroll = QScrollArea()
+    settings_scroll.setFrameShape(QFrame.NoFrame)
+    settings_scroll.setWidgetResizable(True)
+    settings_scroll.setWidget(settings_content)
+    window.pages.widget(3).layout().addWidget(settings_scroll)
     window.tray_mode = switch("Keep running when the window closes")
     window.tray_mode.setEnabled(QSystemTrayIcon.isSystemTrayAvailable())
     window.tray_mode.setToolTip("Without a system tray, closing exits safely.")
@@ -421,6 +439,24 @@ def build_ui(window):
     window.login_start = switch("Start at login")
     window.login_start.setToolTip("Optional per-user startup. Your operating system can disable it.")
     settings.addWidget(window.login_start)
+    window.update_notifications = switch("Notify me about updates when the app starts")
+    settings.addWidget(window.update_notifications)
+    privacy = QLabel("Optional checks contact GitHub. Your files, rules and history are never sent.\n"
+                     "Download from the release page, quit the app, then install over your current version.")
+    privacy.setProperty("muted", True)
+    privacy.setWordWrap(True)
+    settings.addWidget(privacy)
+    window.update_status = QLabel("Update checks are off. You can check once at any time.")
+    window.update_status.setWordWrap(True)
+    settings.addWidget(window.update_status)
+    update_actions = QHBoxLayout()
+    window.check_updates_button = button("Check for updates", window.check_updates)
+    update_actions.addWidget(window.check_updates_button)
+    window.download_update = button("View release & download", window.view_update)
+    window.download_update.setEnabled(False)
+    update_actions.addWidget(window.download_update)
+    update_actions.addStretch()
+    settings.addLayout(update_actions)
     help_text = QLabel("Automatic sorting checks files downloaded while the app was stopped first.\n\n"
                        "Changing the folder or editing rules pauses sorting so you can review the changes.\n\n"
                        "Cancel stops copying and verification safely. Completed moves remain in History.\n"
