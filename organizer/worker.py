@@ -4,7 +4,7 @@ import time
 from PySide6.QtCore import QThread, Signal
 
 from .core import preview
-from .moves import Journal
+from .moves import Journal, OperationCancelled
 
 
 class PendingFiles:
@@ -31,6 +31,8 @@ class PendingFiles:
 class MonitorWorker(QThread):
     report = Signal(str)
     changed = Signal()
+    progress = Signal(str, str, object, object)
+    idle = Signal()
 
     def __init__(self, folder, rules, data_dir, parent=None, interval=2, stable_seconds=2):
         super().__init__(parent)
@@ -46,8 +48,10 @@ class MonitorWorker(QThread):
     def run(self):
         failed = {}
         try:
-            with Journal(self.data_dir / "history.db") as journal:
+            with Journal(self.data_dir / "history.db", cancelled=self.isInterruptionRequested,
+                         progress=lambda path, phase, done, total: self.progress.emit(path.name, phase, done, total)) as journal:
                 journal.recover()
+                self.idle.emit()
                 while not self.isInterruptionRequested():
                     self.wakeup.clear()
                     proposals = preview(self.folder, self.rules)
@@ -68,7 +72,12 @@ class MonitorWorker(QThread):
                             failed[proposal.source] = proposal.signature
                             self.report.emit(f"Needs attention: {proposal.source.name}: {error}")
                             self.changed.emit()
+                        finally:
+                            self.idle.emit()
                     # ponytail: periodic O(files × rules) scan; incremental indexing if folders get large.
                     self.wakeup.wait(self.interval)
+        except OperationCancelled as error:
+            self.report.emit(str(error))
+            self.changed.emit()
         except Exception as error:
             self.report.emit(f"Automatic sorting stopped: {error}")

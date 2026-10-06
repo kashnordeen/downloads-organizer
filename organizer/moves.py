@@ -10,19 +10,50 @@ from pathlib import Path
 from .core import Proposal, safe_path, signature
 
 
-def digest(path):
+class OperationCancelled(Exception):
+    pass
+
+
+def chunks(path, cancelled=None, progress=None):
+    """Bounded reads keep both hashing and copying interruptible."""
+    total, done, last = path.stat().st_size, 0, 0
+    if progress:
+        progress(0, total)
     with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+        while True:
+            if cancelled and cancelled():
+                raise OperationCancelled("Cancelled safely; original retained")
+            chunk = stream.read(1024 * 1024)
+            if not chunk:
+                break
+            yield chunk
+            done += len(chunk)
+            now = time.monotonic()
+            if progress and (now - last >= .1 or done >= total):
+                progress(done, total)
+                last = now
+    if progress and not total:
+        progress(0, 0)
+
+
+def digest(path, cancelled=None, progress=None):
+    result = hashlib.sha256()
+    for chunk in chunks(path, cancelled, progress):
+        result.update(chunk)
+    return result.hexdigest()
 
 
 class Journal:
-    def __init__(self, path):
+    def __init__(self, path, cancelled=None, progress=None):
+        self.cancelled, self.progress = cancelled, progress
         path.parent.mkdir(parents=True, exist_ok=True)
         self.db = sqlite3.connect(path)
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.execute("""CREATE TABLE IF NOT EXISTS operations (
             id INTEGER PRIMARY KEY, source TEXT, destination TEXT, state TEXT,
-            hash TEXT, signature TEXT, temp TEXT, undo_of INTEGER, error TEXT)""")
+            hash TEXT, signature TEXT, temp TEXT, undo_of INTEGER, error TEXT, recorded_at REAL)""")
+        if "recorded_at" not in {row[1] for row in self.db.execute("PRAGMA table_info(operations)")}:
+            self.db.execute("ALTER TABLE operations ADD COLUMN recorded_at REAL")
         self.db.commit()
 
     def __enter__(self):
@@ -37,8 +68,24 @@ class Journal:
                         [fields[k] for k in keys] + [operation])
         self.db.commit()
 
+    def check_cancel(self):
+        if self.cancelled and self.cancelled():
+            raise OperationCancelled("Cancelled safely; original retained")
+
+    def progress_for(self, path, phase):
+        return (lambda done, total: self.progress(path, phase, done, total)) if self.progress else None
+
+    def digest(self, path, phase="Checking", display=None):
+        return digest(path, self.cancelled, self.progress_for(display or path, phase))
+
+    def finishing(self, path):
+        self.check_cancel()
+        if self.progress:
+            self.progress(path, "Finishing", 0, 0)
+        self.check_cancel()
+
     def history(self):
-        return self.db.execute("SELECT id,source,destination,state,error FROM operations ORDER BY id DESC").fetchall()
+        return self.db.execute("SELECT id,source,destination,state,error,recorded_at FROM operations ORDER BY id DESC").fetchall()
 
     def unresolved_sources(self):
         return {row[0] for row in self.db.execute(
@@ -61,45 +108,53 @@ class Journal:
         destination = safe_path(proposal.destination)
         if destination == source:
             raise ValueError("Source and destination are identical")
-        expected = digest(source)
+        expected = self.digest(source)
         if signature(source) != proposal.signature:
             raise ValueError("File changed while reading")
         cursor = self.db.execute("""INSERT INTO operations
-            (source,destination,state,hash,signature,undo_of,error)
-            VALUES (?,?,'pending',?,?,?, '')""", (str(source), str(destination), expected,
-                json.dumps(proposal.signature), undo_of))
+            (source,destination,state,hash,signature,undo_of,error,recorded_at)
+            VALUES (?,?,'pending',?,?,?, '',?)""", (str(source), str(destination), expected,
+                json.dumps(proposal.signature), undo_of, time.time()))
         operation = cursor.lastrowid
         self.db.commit()
         temp = None
+        published = False
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             safe_path(destination.parent)
             fd, name = tempfile.mkstemp(prefix=".organizer-", suffix=".tmp", dir=destination.parent)
             temp = Path(name)
-            with os.fdopen(fd, "wb") as target, source.open("rb") as origin:
+            with os.fdopen(fd, "wb") as target:
                 self.update(operation, temp=str(temp))
-                shutil.copyfileobj(origin, target, 1024 * 1024)
+                for chunk in chunks(source, self.cancelled, self.progress_for(source, "Copying")):
+                    target.write(chunk)
+                if self.progress:
+                    self.progress(source, "Flushing to disk", 0, 0)
+                self.check_cancel()
                 target.flush()
                 os.fsync(target.fileno())
-            if digest(temp) != expected or signature(source) != proposal.signature or digest(source) != expected:
+            if self.digest(temp, "Verifying copy", source) != expected or signature(source) != proposal.signature or self.digest(source, "Verifying original") != expected:
                 raise ValueError("Source changed during copy; original retained")
             shutil.copystat(source, temp)
             number = 0
             while True:
+                self.check_cancel()
                 candidate = destination if not number else destination.with_name(
                     f"{destination.stem} ({number}){destination.suffix}")
                 self.update(operation, destination=str(candidate))
                 try:
                     # Atomic no-overwrite publication. Fail safely on filesystems without hard links.
                     os.link(temp, candidate)
+                    published = True
                     break
                 except FileExistsError:
                     if undo_of is not None:
                         raise ValueError("Original path is occupied; undo cancelled")
                     number += 1
             self.update(operation, state="published", signature=json.dumps(signature(candidate)))
-            if signature(source) != proposal.signature or digest(source) != expected:
+            if signature(source) != proposal.signature or self.digest(source, "Final check") != expected:
                 raise ValueError("Source changed; both copies retained for review")
+            self.finishing(source)
             # ponytail: readiness is heuristic; downloader-specific completion signals if needed.
             source.unlink()
             temp.unlink()
@@ -107,6 +162,18 @@ class Journal:
             if undo_of is not None:
                 self.update(undo_of, state="undone")
             return candidate
+        except OperationCancelled as error:
+            # Never remove a published file on cancellation: it may have been opened or edited.
+            state = "review" if published else "cancelled"
+            detail = "Cancelled; both copies retained. Resolve in History." if published else str(error)
+            try:
+                if temp is not None:
+                    safe_path(temp).unlink(missing_ok=True)
+                saved = {"signature": json.dumps(signature(candidate))} if published else {}
+                self.update(operation, state=state, temp="", error=detail, **saved)
+            except (OSError, ValueError) as cleanup_error:
+                self.update(operation, state="review", error=f"{detail}; cleanup pending: {cleanup_error}")
+            raise OperationCancelled(detail) from error
         except Exception as error:
             self.update(operation, state="review", error=str(error))
             raise
@@ -120,7 +187,7 @@ class Journal:
         if source.exists() or source.is_symlink():
             raise ValueError("Original path is occupied; undo cancelled")
         safe_path(destination)
-        if not destination.is_file() or tuple(json.loads(row[4])) != signature(destination) or digest(destination) != row[3]:
+        if not destination.is_file() or tuple(json.loads(row[4])) != signature(destination) or self.digest(destination) != row[3]:
             raise ValueError("Destination changed or is missing; undo cancelled")
         return self.move(Proposal(destination, source, "Undo", signature(destination)), undo_of=operation)
 
@@ -134,8 +201,9 @@ class Journal:
             raise ValueError("Original file is missing; no action taken")
         if target.exists() or target.is_symlink():
             if (not target.is_file() or tuple(json.loads(row[4])) != signature(target)
-                    or digest(target) != row[3] or digest(source) != row[3]):
+                    or self.digest(target, "Verifying copy") != row[3] or self.digest(source, "Verifying original") != row[3]):
                 raise ValueError("A copy changed; both files were left untouched")
+            self.finishing(source)
             if choice == "move":
                 source.unlink()
                 state = "complete"
@@ -148,9 +216,11 @@ class Journal:
                     raise
                 state = "kept"
         elif choice == "move":
+            self.check_cancel()
             self.update(operation, state="retryable", error="Retry requested from History")
             return self.move(Proposal(source, target, "Review", signature(source)))
         else:
+            self.check_cancel()
             state = "kept"
         self.update(operation, state=state, signature=json.dumps(signature(target if state == "complete" else source)),
                     temp="", error="")
@@ -166,7 +236,8 @@ class Journal:
                     pass
         return target if state == "complete" else source
 
-    def recover(self):
+    def recover(self, verify=True):
+        deferred = False
         rows = self.db.execute("""SELECT id,source,destination,hash,signature,temp,undo_of,error
             FROM operations WHERE state IN ('pending','published','review','keep_pending')""").fetchall()
         for operation, source, destination, expected, saved, temp, undo_of, error in rows:
@@ -194,8 +265,11 @@ class Journal:
                               "destination is absent. Refresh Preview to retry.")
                     self.update(operation, state="retryable", error=detail)
                     continue
+                if not verify and not original.exists() and target.is_file():
+                    deferred = True
+                    continue
                 if (not original.exists() and not original.is_symlink() and target.is_file()
-                        and signature(target)[:4] == tuple(json.loads(saved))[:4] and digest(target) == expected):
+                        and signature(target)[:4] == tuple(json.loads(saved))[:4] and self.digest(target, "Recovering") == expected):
                     self.update(operation, state="complete", error="")
                     if undo_of is not None:
                         self.update(undo_of, state="undone")
@@ -203,3 +277,4 @@ class Journal:
                     self.update(operation, state="review", error="Interrupted operation: files retained; inspect paths before acting")
             except (OSError, ValueError, TypeError) as error:
                 self.update(operation, state="review", error=str(error))
+        return deferred

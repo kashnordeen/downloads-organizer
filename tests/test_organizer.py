@@ -1,4 +1,6 @@
 import json
+import sqlite3
+from contextlib import closing
 import tempfile
 import os
 import time
@@ -72,12 +74,30 @@ class OrganizerTests(unittest.TestCase):
         proposal.destination.parent.mkdir()
         proposal.destination.write_bytes(b"existing")
         with Journal(self.root / "history.db") as journal:
+            started = time.time()
             actual = journal.move(proposal)
             self.assertEqual(actual.name, "sample (1).pdf")
             self.assertEqual(actual.read_bytes(), b"important data")
             self.assertEqual(proposal.destination.read_bytes(), b"existing")
             self.assertFalse(proposal.source.exists())
             self.assertEqual(journal.history()[0][3], "complete")
+            self.assertGreaterEqual(journal.history()[0][5], started)
+            self.assertLessEqual(journal.history()[0][5], time.time())
+
+    def test_history_timestamp_upgrade_preserves_older_rows(self):
+        path = self.root / "history.db"
+        with closing(sqlite3.connect(path)) as database:
+            database.execute("CREATE TABLE operations (id INTEGER PRIMARY KEY, source TEXT, destination TEXT, state TEXT, hash TEXT, signature TEXT, temp TEXT, undo_of INTEGER, error TEXT)")
+            database.execute("INSERT INTO operations (source,destination,state,error) VALUES ('original','destination','cancelled','Old details')")
+            database.commit()
+        for _ in range(2):
+            with Journal(path) as journal:
+                self.assertEqual(journal.history(), [(1, "original", "destination", "cancelled", "Old details", None)])
+        proposal = self.ready_proposal()
+        with Journal(path) as journal:
+            journal.move(proposal)
+            self.assertIsInstance(journal.history()[0][5], float)
+            self.assertIsNone(journal.history()[1][5])
 
     def test_changed_or_new_download_is_not_moved(self):
         proposal = self.ready_proposal()
@@ -125,6 +145,17 @@ class OrganizerTests(unittest.TestCase):
             journal.recover()
             self.assertEqual(journal.history()[0][3], "complete")
             self.assertEqual(proposal.destination.read_bytes(), b"important data")
+
+    def test_ui_recovery_defers_large_verification_to_worker(self):
+        proposal = self.ready_proposal()
+        with Journal(self.root / "recovery.db") as journal:
+            journal.move(proposal)
+            journal.update(1, state="published")
+            with patch("organizer.moves.digest", side_effect=AssertionError("UI must not hash files")):
+                self.assertTrue(journal.recover(verify=False))
+            self.assertEqual(journal.history()[0][3], "published")
+            journal.recover()
+            self.assertEqual(journal.history()[0][3], "complete")
 
     def test_interrupted_move_with_original_only_is_safe_to_retry(self):
         proposal = self.ready_proposal()
@@ -213,17 +244,67 @@ class OrganizerTests(unittest.TestCase):
 
     def test_source_change_during_copy_is_preserved(self):
         proposal = self.ready_proposal()
-        import shutil
-        copy = shutil.copyfileobj
-        def changing(origin, target, length):
-            copy(origin, target, length)
-            proposal.source.write_bytes(b"new download data")
-        with Journal(self.root / "history.db") as journal:
-            with patch("organizer.moves.shutil.copyfileobj", changing):
-                with self.assertRaises(ValueError):
-                    journal.move(proposal)
+        def changing(path, phase, done, total):
+            if phase == "Copying" and done:
+                proposal.source.write_bytes(b"new download data")
+        with Journal(self.root / "history.db", progress=changing) as journal:
+            with self.assertRaises(ValueError):
+                journal.move(proposal)
             self.assertEqual(proposal.source.read_bytes(), b"new download data")
             self.assertFalse(proposal.destination.exists())
+
+    def test_cancel_during_read_copy_and_verification_preserves_original(self):
+        from organizer.moves import OperationCancelled
+        for phase in ("Checking", "Copying", "Verifying copy", "Verifying original", "Final check"):
+            with self.subTest(phase=phase):
+                proposal = self.ready_proposal()
+                content = b"important data" * 240000
+                proposal.source.write_bytes(content)
+                os.utime(proposal.source, (time.time() - 10, time.time() - 10))
+                from organizer.core import signature
+                proposal.signature = signature(proposal.source)
+                cancelled = [False]
+                def progress(path, current, done, total):
+                    if current == phase and done:
+                        self.assertLess(done, total)
+                        cancelled[0] = True
+                with Journal(self.root / (phase + ".db"), cancelled=lambda: cancelled[0], progress=progress) as journal:
+                    with self.assertRaises(OperationCancelled):
+                        journal.move(proposal)
+                    self.assertEqual(proposal.source.read_bytes(), content)
+                    self.assertEqual(list(proposal.destination.parent.glob(".organizer-*.tmp")), [])
+                    if phase == "Final check":
+                        self.assertEqual(proposal.destination.read_bytes(), content)
+                        self.assertEqual(journal.history()[0][3], "review")
+                        journal.cancelled = None
+                        journal.progress = None
+                        journal.resolve_review(journal.history()[0][0], "keep")
+                        self.assertFalse(proposal.destination.exists())
+                    else:
+                        self.assertFalse(proposal.destination.exists())
+                        self.assertEqual(journal.unresolved_sources(), set())
+
+    def test_cancel_undo_keeps_completed_move_and_handles_zero_bytes(self):
+        from organizer.moves import OperationCancelled
+        proposal = self.ready_proposal()
+        with Journal(self.root / "undo-cancel.db") as journal:
+            destination = journal.move(proposal)
+            journal.cancelled = lambda: True
+            with self.assertRaises(OperationCancelled):
+                journal.undo(1)
+            self.assertEqual(destination.read_bytes(), b"important data")
+            self.assertFalse(proposal.source.exists())
+            self.assertEqual(journal.history()[0][3], "complete")
+            journal.cancelled = None
+            journal.undo(1)
+        proposal.source.write_bytes(b"")
+        os.utime(proposal.source, (time.time() - 10, time.time() - 10))
+        from organizer.core import signature
+        proposal.signature = signature(proposal.source)
+        events = []
+        with Journal(self.root / "empty.db", progress=lambda *event: events.append(event)) as journal:
+            self.assertEqual(journal.move(proposal).read_bytes(), b"")
+            self.assertTrue(any(event[1] == "Finishing" for event in events))
 
     def test_disappearing_file_does_not_break_scan(self):
         proposal = self.ready_proposal()

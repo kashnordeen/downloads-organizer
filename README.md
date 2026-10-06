@@ -8,13 +8,13 @@
 
 Preview file moves, build your own rules, and let a local desktop app handle the routine sorting—with history and safe undo.
 
-![Version](https://img.shields.io/badge/version-1.0.0-2457d6?style=flat-square)
+![Version](https://img.shields.io/badge/release-1.1.0-2457d6?style=flat-square)
 ![Python](https://img.shields.io/badge/Python-3.12%E2%80%933.14-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Qt](https://img.shields.io/badge/Qt-6.11.2-41CD52?style=flat-square&logo=qt&logoColor=white)
 [![MIT license](https://img.shields.io/badge/license-MIT-2457d6?style=flat-square)](LICENSE)
 ![Local](https://img.shields.io/badge/files-stay_local-2457d6?style=flat-square)
 
-[Download 1.0.0](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.0.0) · [How it works](#daily-use) · [Build and install](docs/BUILDING.md) · [Validation](VALIDATION.md)
+[Download 1.1.0](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.1.0) · [How it works](#daily-use) · [Build and install](docs/BUILDING.md) · [Validation](VALIDATION.md)
 
 <img src="docs/media/workspace-tour.gif" width="1000" alt="Animated tour of the real Downloads Organizer: preview demo downloads, edit rules, review move history, and open settings">
 
@@ -33,6 +33,8 @@ Preview file moves, build your own rules, and let a local desktop app handle the
 | **Background sorting** | Keep the app in the system tray; optionally start it at login. |
 | **History and undo** | Restore unchanged files, or resolve reviewed moves by moving to the destination or leaving the file in Downloads. |
 | **A focused workspace** | Separate Preview, Rules, History, and Settings pages, with blue light/dark themes. |
+| **Visible progress and cancellation** | See the current file, phase, percentage, and bytes. Cancel stops remaining files and interrupts copying and hashing. |
+| **Optional update notices** | Check stable GitHub releases on startup or manually. You choose when to download and install. |
 
 No account, cloud service, telemetry, or administrator privileges are required for normal operation. Python is included in the downloads.
 
@@ -44,11 +46,20 @@ No account, cloud service, telemetry, or administrator privileges are required f
 | **macOS Intel / Apple Silicon** | Separate x64 and arm64 DMGs with app bundles. CI tests on macOS 15. |
 | **Linux x64** | Debian/Ubuntu package and portable tar.gz. CI tests on Ubuntu 22.04; native display libraries and glibc 2.34+ required. |
 
-Version **1.0.0** is the first stable release. Windows builds are unsigned; macOS builds are ad-hoc signed but lack Developer ID signing and notarization. OS security policies may warn or block installation. Earlier OS versions, real desktop tray/login/reboot behavior on macOS/Linux, and signed installation remain manual validation tasks. See [installation guidance](docs/BUILDING.md).
+Version **1.1.0** is the current stable release. Windows builds are unsigned; macOS builds are ad-hoc signed but lack Developer ID signing and notarization. OS security policies may warn or block installation. Earlier OS versions, real desktop tray/login/reboot behavior on macOS/Linux, and signed installation remain manual validation tasks. See [installation guidance](docs/BUILDING.md).
+
+**New in 1.1.0:** a redesigned interface, progress and safe cancellation, optional update notices, saved Day/Night appearance, rule priority numbers and history timestamps. Tab transitions and the tray menu now render clearly in both themes. Quit the running app and install over your current version; settings and history are retained. Update notices are available from 1.1.0; users on 1.0.0 should download this release manually.
 
 ## Get started
 
-[Download 1.0.0 for your OS](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.0.0), install it, and open **Downloads Organizer**. Confirm the folder on first launch, follow the guided tour, and refresh Preview. Nothing moves until you confirm a manual move or enable automatic sorting.
+[Download 1.1.0 for your OS](https://github.com/kashnordeen/downloads-organizer/releases/tag/v1.1.0), install it, and open **Downloads Organizer**. Confirm the folder on first launch, follow the guided tour, and refresh Preview. Nothing moves until you confirm a manual move or enable automatic sorting.
+
+| Download | Package |
+| :--- | :--- |
+| Windows x64 | [Setup installer](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-windows-x64-setup.exe) · [Portable ZIP](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-windows-x64-portable.zip) |
+| macOS Apple Silicon | [arm64 DMG](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-macos-arm64-unsigned.dmg) |
+| macOS Intel | [x64 DMG](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-macos-x64-unsigned.dmg) |
+| Linux x64 | [Debian/Ubuntu package](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-linux-x64.deb) · [Portable archive](https://github.com/kashnordeen/downloads-organizer/releases/download/v1.1.0/DownloadsOrganizer-1.1.0-linux-x64-portable.tar.gz) |
 
 Windows Setup creates a Start-menu shortcut. On macOS, drag the app from the DMG to Applications before launching. On Ubuntu/Debian, install the `.deb` with the package installer. Portable downloads are also available for Windows/Linux. [Full instructions and upgrades](docs/BUILDING.md).
 
@@ -92,13 +103,23 @@ Use a supported Python version. On Linux, install the display libraries required
 4. **Organize files.** Confirm the manual move, or enable automatic sorting after reviewing your rules.
 5. **Review History.** Select a completed move to undo. If a row says **review**, select it and choose **Move to destination** or **Leave in Downloads**. The app verifies copies before changing either file. A file left in Downloads is skipped on future scans unless it changes.
 
-Switch pages with the sidebar or **Alt+1** through **Alt+4**. Resize table columns or hover over a path to read it in full. Navigation preserves the current preview and automatic monitoring. Editing rules or changing the watched folder pauses sorting and invalidates the preview.
+Switch pages with the top navigation or **Alt+1** through **Alt+4**. Tabs use a short slide when desktop UI effects are enabled. Each page has an opaque background, so previous pages cannot show through during transitions. Rule row numbers show their current priority and update when rules are added, removed or reordered. Resize table columns or hover over a path to read it in full. Double-click a rule to open its editor. Navigation preserves the current preview and automatic monitoring. Editing rules or changing the watched folder pauses sorting and invalidates the preview.
+
+The current tab has a blue underline; a dashed underline shows focus. Larger text and stronger contrast apply throughout the workspace and dialogs.
+
+In **Settings → Appearance**, turn **Night mode** off for Day mode or on for Night mode; the app remembers your choice, and the tray menu uses the same theme. Table headings align with their cells, with continuous column dividers. History **Details** shows when each operation was recorded, in your local date and time; hover for the time zone and full message. Older history entries have no recorded timestamp and display **Time unavailable (older entry)**.
+
+During a move, the progress area shows **Checking**, **Copying**, disk flushing, verification, and **Finishing**. Percentages and byte counts refer to the current phase, not the entire batch. **Cancel** stops remaining files; completed moves remain in History and can be undone. If a destination copy was already published, cancellation keeps both copies for review. Disk flushes and individual operating-system calls must return before cancellation finishes; the interface remains usable while waiting. Final journal/removal steps finish safely.
 
 ### When the window closes
 
 With **Keep running in the tray** enabled and a usable tray available, closing the window keeps the app running. The tray menu offers Show, Pause/Resume, and Quit. Without a usable tray, closing exits safely.
 
-**Quit app** finishes the current file before stopping. Automatic mode remains saved, so reopening catches up on downloads created during the stopped period. **Start at login** is optional and respects operating-system disablement.
+**Quit app** requests a safe stop before exiting. Automatic mode remains saved, so reopening catches up on downloads created during the stopped period. Cancelling an automatic operation pauses automatic mode. **Start at login** is optional and respects operating-system disablement.
+
+### Updates
+
+Update checks start off. Enable **Notify me about updates when the app starts**, or use **Check for updates** for a one-time check. The app checks the latest stable release and displays a **View update** notice. It opens this project's official GitHub release page; it never downloads or runs an installer automatically. Quit the app and install the replacement over the existing version—no uninstall is required. Settings and history stay in their existing per-user location. Users of 1.0.0 need one manual upgrade to receive this feature.
 
 ## Safety and privacy
 
@@ -111,6 +132,8 @@ With **Keep running in the tray** enabled and a usable tray available, closing t
 Readiness uses file age and, in automatic mode, stable metadata observed across scans at least two seconds apart. This cannot prove every download is complete. Avoid files actively modified by other programs: an external writer can race the final source check/removal. Copying requires temporary disk space; filesystems without hard-link support fail safely and retain the source/recovery copy. SHA-256 verifies content, not arbitrary extended metadata.
 
 Settings and SQLite history use Qt's per-user application data location under **LocalOrganizer / DownloadsOrganizer**. No file data is sent to a server. Interrupted operations may leave hidden `.organizer-*.tmp` files for manual review.
+
+Optional update checks contact GitHub over HTTPS; GitHub receives the IP address and app version in the request. Files, filenames, rules, paths, and history are never transmitted. With checks off, the organizer needs no network connection. Opening a release page uses your normal browser.
 
 ## Inside the app
 
@@ -134,6 +157,7 @@ flowchart LR
 | [`worker.py`](organizer/worker.py) | Startup backlog priority, readiness tracking, notifications, and rescans. |
 | [`moves.py`](organizer/moves.py) | Verified copying, collision handling, journal recovery, and undo. |
 | [`startup.py`](organizer/startup.py) | Optional per-user startup and Windows packaged startup APIs. |
+| [`updates.py`](organizer/updates.py) | Optional, bounded release checks and trusted release-page links. |
 
 ## Development and verification
 

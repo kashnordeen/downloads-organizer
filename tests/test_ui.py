@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt, QPoint, QAbstractAnimation
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 from organizer.app import Window
 
@@ -50,6 +50,31 @@ class DesktopFlowTest(unittest.TestCase):
             self.assertEqual(restarted.read_rules()[0].name, "My documents")
             self.assertFalse(restarted.automatic.isChecked())
             restarted.close()
+
+    def test_update_checks_are_opt_in_and_preference_survives_upgrade(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            with patch("organizer.updates.latest_release", return_value=("2.0.0", "https://github.com/kashnordeen/downloads-organizer/releases/tag/v2.0.0")) as lookup:
+                window = Window(root / "data")
+                window.set_folder(root)
+                APP.processEvents()
+                self.assertFalse(window.update_notifications.isChecked())
+                lookup.assert_not_called()
+                window.check_updates()
+                self.wait_until(lambda: not window.update_worker.isRunning())
+                APP.processEvents()
+                self.assertIn("2.0.0", window.update_status.text())
+                self.assertTrue(window.download_update.isEnabled())
+                window.update_notifications.setChecked(True)
+                self.wait_until(lambda: not window.update_worker.isRunning())
+                APP.processEvents()
+                window.close()
+                restarted = Window(root / "data")
+                self.assertTrue(restarted.update_notifications.isChecked())
+                APP.processEvents()
+                self.wait_until(lambda: restarted.update_worker is not None and not restarted.update_worker.isRunning())
+                APP.processEvents()
+                restarted.close()
 
     def test_guided_tour_visits_every_workspace_page(self):
         from organizer.ui import guided_tour
@@ -113,6 +138,101 @@ class DesktopFlowTest(unittest.TestCase):
             self.assertEqual(window.files.rowCount(), 0)
             window.close()
 
+    def test_rule_numbers_follow_priority_and_tab_motion_survives_rapid_switches(self):
+        from organizer.core import Rule
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            window = Window(root / "data")
+            window.set_folder(root)
+            window.show()
+            APP.processEvents()
+            self.assertFalse(window.rules.verticalHeader().isHidden())
+            def numbers():
+                return [int(window.rules.model().headerData(row, Qt.Vertical))
+                        for row in range(window.rules.rowCount())]
+            window.add_rule(Rule("PDFs", ["pdf"], "", str(root / "PDFs")))
+            window.rules.setCurrentCell(window.rules.rowCount() - 1, 1)
+            window.reorder(-1)
+            self.assertEqual(numbers(), list(range(1, window.rules.rowCount() + 1)))
+            self.assertEqual(window.read_rules()[-2].name, "PDFs")
+            window.remove_rule()
+            self.assertEqual(numbers(), list(range(1, window.rules.rowCount() + 1)))
+            with patch.object(QApplication, "isEffectEnabled", return_value=True):
+                for mode, background in [(False, "#f6f8fc"), (True, "#151a24"), (False, "#f6f8fc")]:
+                    window.night_mode.setChecked(mode)
+                    window.show_page(0)
+                    for index in [1, 3, 2, 0, 1]:
+                        window.navigation.button(index).click()
+                        self.assertEqual(window.pages.currentIndex(), index)
+                        self.assertEqual(window.page_animation.state(), QAbstractAnimation.Running)
+                        self.assertTrue(window.navigation.button(index).isEnabled())
+                        self.assertIsNone(window.pages.graphicsEffect())
+                        self.assertEqual(sum(window.pages.widget(page).isVisible() for page in range(4)), 1)
+                        self.assertEqual(window.pages.grab().toImage().pixelColor(3, 3).name(), background)
+                    self.wait_until(lambda: window.page_animation.state() == QAbstractAnimation.Stopped)
+                    self.assertEqual(window.pages.currentWidget().pos(), QPoint(0, 0))
+                    self.assertTrue(window.pages.currentWidget().testAttribute(Qt.WA_StyledBackground))
+            with patch.object(QApplication, "isEffectEnabled", return_value=False):
+                window.show_page(3)
+                self.assertEqual(window.page_animation.state(), QAbstractAnimation.Stopped)
+                self.assertEqual(window.pages.currentWidget().pos(), QPoint(0, 0))
+            window.close()
+
+    def test_tray_menu_uses_theme_background_and_readable_selection(self):
+        from PySide6.QtGui import QPalette
+        with tempfile.TemporaryDirectory() as directory:
+            window = Window(Path(directory).resolve() / "data")
+            menu = window.tray.contextMenu()
+            for mode, surface, ink, accent, selected in [
+                    (False, "#ffffff", "#17243b", "#2457d6", "#ffffff"),
+                    (True, "#1d2431", "#f1f5fc", "#a8c8ff", "#10264e"),
+                    (False, "#ffffff", "#17243b", "#2457d6", "#ffffff")]:
+                window.night_mode.setChecked(mode)
+                menu.ensurePolished()
+                self.assertEqual(menu.palette().color(QPalette.Window).name(), surface)
+                self.assertEqual(menu.palette().color(QPalette.WindowText).name(), ink)
+                menu.popup(QPoint(30, 30))
+                APP.processEvents()
+                menu.setActiveAction(menu.actions()[0])
+                APP.processEvents()
+                image = menu.grab().toImage()
+                scale = image.devicePixelRatio()
+                self.assertEqual(image.pixelColor(int(3 * scale), int(3 * scale)).name(), surface)
+                row = menu.actionGeometry(menu.actions()[0])
+                self.assertEqual(image.pixelColor(int((row.left() + 2) * scale),
+                                                  int(row.center().y() * scale)).name(), accent)
+                colors = {image.pixelColor(x, y).name() for x in range(int(row.left() * scale), int(row.right() * scale))
+                          for y in range(int(row.top() * scale), int(row.bottom() * scale))}
+                self.assertIn(selected, colors)
+                menu.close()
+            window.close()
+
+    def test_tab_focus_keeps_geometry_and_keyboard_navigation(self):
+        from PySide6.QtTest import QTest
+        with tempfile.TemporaryDirectory() as directory:
+            window = Window(Path(directory).resolve() / "data")
+            window.show()
+            window.activateWindow()
+            APP.processEvents()
+            for mode in (False, True, False):
+                window.night_mode.setChecked(mode)
+                tab = window.navigation.button(1)
+                window.show_page(0)
+                tab.clearFocus()
+                APP.processEvents()
+                normal_size = tab.sizeHint()
+                tab.setFocus(Qt.TabFocusReason)
+                APP.processEvents()
+                self.assertTrue(tab.hasFocus())
+                self.assertEqual(tab.sizeHint(), normal_size)
+                self.assertNotEqual(tab.grab().toImage().pixelColor(tab.width() // 2, 1).name(),
+                                    "#a8c8ff" if mode else "#2457d6")
+                QTest.keyClick(tab, Qt.Key_Space)
+                APP.processEvents()
+                self.assertEqual(window.pages.currentIndex(), 1)
+                self.assertEqual(tab.sizeHint(), normal_size)
+            window.close()
+
     def test_tray_close_show_and_quit(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()
@@ -130,6 +250,53 @@ class DesktopFlowTest(unittest.TestCase):
                 window.request_quit()
                 self.assertTrue(window.quitting)
                 self.assertFalse(window.tray.isVisible())
+
+    def test_day_night_choice_persists_and_history_displays_local_time(self):
+        from datetime import datetime
+        from PySide6.QtGui import QPalette
+        from organizer.ui import RuleDialog
+        from organizer.moves import Journal
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            window = Window(root / "data")
+            window.set_folder(root)
+            window.refresh()
+            proposals = list(window.proposals)
+            for mode, color in [(1, "#151a24"), (0, "#f6f8fc"), (1, "#151a24")]:
+                window.night_mode.setChecked(bool(mode))
+                self.assertEqual(window.palette().color(QPalette.Window).name(), color)
+                self.assertEqual(window.proposals, proposals)
+                dialog = RuleDialog(window, window.read_rules()[0])
+                dialog.contains.ensurePolished()
+                self.assertEqual(dialog.contains.palette().color(QPalette.PlaceholderText).name(),
+                                 "#c0ccdf" if mode else "#475569")
+                dialog.close()
+            self.assertTrue(window.pages.widget(3).isAncestorOf(window.night_mode))
+            window.close()
+            restarted = Window(root / "data")
+            self.assertTrue(restarted.night_mode.isChecked())
+            self.assertEqual(restarted.palette().color(QPalette.Window).name(), "#151a24")
+            recorded = 1791283200
+            with Journal(root / "data" / "history.db") as journal:
+                journal.db.execute("INSERT INTO operations (source,destination,state,error,recorded_at) VALUES (?,?, 'cancelled',?,?)",
+                                   (str(root / "sample.pdf"), str(root / "PDFs/sample.pdf"), "Cancelled safely", recorded))
+                journal.db.commit()
+            restarted.load_history()
+            details = restarted.history_table.item(0, 4)
+            self.assertIn(datetime.fromtimestamp(recorded).strftime("%d %b %Y · %H:%M:%S"), details.text())
+            self.assertIn("Cancelled safely", details.text())
+            self.assertIn("local time", details.toolTip())
+            for table in (restarted.files, restarted.rules, restarted.history_table):
+                self.assertTrue(table.showGrid())
+                self.assertEqual(table.horizontalHeader().defaultAlignment(), Qt.AlignLeft | Qt.AlignVCenter)
+            restarted.resize(900, 620)
+            restarted.show_page(2)
+            restarted.show()
+            APP.processEvents()
+            header = restarted.history_table.horizontalHeader()
+            self.assertLessEqual(header.sectionViewportPosition(4) + header.sectionSize(4),
+                                 restarted.history_table.viewport().width())
+            restarted.close()
 
     def test_no_tray_fallback_and_single_instance_lock(self):
         from PySide6.QtCore import QLockFile
@@ -246,6 +413,48 @@ class DesktopFlowTest(unittest.TestCase):
             self.wait_worker(restarted)
             self.assertEqual(source.read_bytes(), b"test report")
             restarted.close()
+
+    def test_cancel_keeps_navigation_responsive_and_stops_remaining_files(self):
+        import threading
+        from organizer.moves import chunks
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            downloads = root / "Downloads"
+            downloads.mkdir()
+            for name in ("large.pdf", "next.pdf"):
+                path = downloads / name
+                path.write_bytes(b"data" * 600000)
+                os.utime(path, (time.time() - 10, time.time() - 10))
+            window = Window(root / "data")
+            window.set_folder(downloads)
+            window.refresh()
+            entered, release = threading.Event(), threading.Event()
+            def slow_chunks(*args, **kwargs):
+                for chunk in chunks(*args, **kwargs):
+                    entered.set()
+                    release.wait(5)
+                    yield chunk
+            with patch("organizer.moves.chunks", slow_chunks):
+                window.start_worker(window.proposals)
+                try:
+                    self.wait_until(entered.is_set)
+                    window.navigation.button(2).click()
+                    self.assertEqual(window.pages.currentIndex(), 2)
+                    self.assertTrue(window.isEnabled())
+                    self.assertFalse(window.rules.isEnabled())
+                    self.assertTrue(window.cancel_button.isEnabled())
+                    window.cancel_button.click()
+                    self.assertTrue(window.worker.isInterruptionRequested())
+                    self.assertFalse(window.cancel_button.isEnabled())
+                finally:
+                    release.set()
+                    self.wait_worker(window)
+            self.assertTrue((downloads / "large.pdf").exists())
+            self.assertTrue((downloads / "next.pdf").exists())
+            self.assertFalse((downloads / "Documents" / "large.pdf").exists())
+            self.assertIn("Cancelled", window.status.text())
+            self.assertTrue(window.rules.isEnabled())
+            window.close()
 
     def test_review_keep_and_preview_button(self):
         from organizer.moves import Journal
