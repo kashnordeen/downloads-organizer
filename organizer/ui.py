@@ -1,12 +1,13 @@
 """Focused native Qt layout and the shared blue color palette."""
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
 from PySide6.QtGui import QIcon, QPalette, QColor
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QLineEdit, QMessageBox,
     QHeaderView, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget,
-    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon, QProgressBar, QScrollArea)
+    QTableWidget, QVBoxLayout, QWidget, QSystemTrayIcon, QProgressBar, QScrollArea,
+    QGraphicsOpacityEffect)
 
 from .core import Rule
 
@@ -272,6 +273,22 @@ def build_ui(window):
     nav_layout.addStretch()
     window.navigation = QButtonGroup(window)
     window.pages = QStackedWidget()
+    window.page_opacity = QGraphicsOpacityEffect(window.pages)
+    window.page_opacity.setOpacity(1.0)
+    window.pages.setGraphicsEffect(window.page_opacity)
+    window.page_animation = QPropertyAnimation(window.page_opacity, b"opacity", window)
+    window.page_animation.setDuration(160)
+    window.page_animation.setStartValue(.65)
+    window.page_animation.setEndValue(1.0)
+    window.page_animation.setEasingCurve(QEasingCurve.OutCubic)
+
+    def animate_page(_):
+        window.page_animation.stop()
+        window.page_opacity.setOpacity(1.0)
+        if window.isVisible() and QApplication.isEffectEnabled(Qt.UI_AnimateMenu):
+            window.page_animation.start()
+
+    window.pages.currentChanged.connect(animate_page)
     for index, name in enumerate(["Preview", "Rules", "History", "Settings"]):
         nav = QPushButton(name)
         nav.setProperty("nav", True)
@@ -387,6 +404,10 @@ def build_ui(window):
     window.rules.setEditTriggers(QTableWidget.NoEditTriggers)
     window.rules.doubleClicked.connect(lambda: window.edit_rule())
     window.rules.setColumnHidden(3, True)
+    # Qt's row headers automatically follow insertions, removal and rule priority.
+    window.rules.verticalHeader().show()
+    window.rules.verticalHeader().setFixedWidth(44)
+    window.rules.verticalHeader().setAccessibleName("Rule serial number and priority")
     window.rules.verticalHeader().setDefaultSectionSize(60)
     for col, width in enumerate([60, 170, 230, 160, 280]):
         window.rules.setColumnWidth(col, width)

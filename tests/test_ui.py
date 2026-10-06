@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import QTimer, Qt, QAbstractAnimation
 from PySide6.QtWidgets import QApplication, QMessageBox, QPushButton
 from organizer.app import Window
 
@@ -136,6 +136,39 @@ class DesktopFlowTest(unittest.TestCase):
             window.rules.item(0, 1).setText("Changed rule")
             self.assertFalse(window.organize.isEnabled())
             self.assertEqual(window.files.rowCount(), 0)
+            window.close()
+
+    def test_rule_numbers_follow_priority_and_tab_motion_survives_rapid_switches(self):
+        from organizer.core import Rule
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            window = Window(root / "data")
+            window.set_folder(root)
+            window.show()
+            APP.processEvents()
+            self.assertFalse(window.rules.verticalHeader().isHidden())
+            def numbers():
+                return [int(window.rules.model().headerData(row, Qt.Vertical))
+                        for row in range(window.rules.rowCount())]
+            window.add_rule(Rule("PDFs", ["pdf"], "", str(root / "PDFs")))
+            window.rules.setCurrentCell(window.rules.rowCount() - 1, 1)
+            window.reorder(-1)
+            self.assertEqual(numbers(), list(range(1, window.rules.rowCount() + 1)))
+            self.assertEqual(window.read_rules()[-2].name, "PDFs")
+            window.remove_rule()
+            self.assertEqual(numbers(), list(range(1, window.rules.rowCount() + 1)))
+            with patch.object(QApplication, "isEffectEnabled", return_value=True):
+                for index in [1, 3, 2, 0, 1]:
+                    window.navigation.button(index).click()
+                    self.assertEqual(window.pages.currentIndex(), index)
+                    self.assertEqual(window.page_animation.state(), QAbstractAnimation.Running)
+                    self.assertTrue(window.navigation.button(index).isEnabled())
+                self.wait_until(lambda: window.page_animation.state() == QAbstractAnimation.Stopped)
+                self.assertEqual(window.page_opacity.opacity(), 1.0)
+            with patch.object(QApplication, "isEffectEnabled", return_value=False):
+                window.show_page(3)
+                self.assertEqual(window.page_animation.state(), QAbstractAnimation.Stopped)
+                self.assertEqual(window.page_opacity.opacity(), 1.0)
             window.close()
 
     def test_tray_close_show_and_quit(self):
