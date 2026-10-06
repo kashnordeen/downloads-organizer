@@ -2,7 +2,7 @@
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize, QPropertyAnimation, QEasingCurve
-from PySide6.QtGui import QIcon, QPalette, QColor
+from PySide6.QtGui import QIcon, QPalette, QColor, QFontDatabase
 from PySide6.QtWidgets import (QApplication, QButtonGroup, QCheckBox, QFrame, QDialog,
     QDialogButtonBox, QFileDialog, QFormLayout, QLineEdit, QMessageBox,
     QHeaderView, QHBoxLayout, QLabel, QPushButton, QSizePolicy, QStackedWidget,
@@ -181,9 +181,9 @@ def apply_theme(window, scheme=None):
         window.night_mode.setChecked(scheme == Qt.ColorScheme.Dark)
     dark = window.night_mode.isChecked()
     bg, surface, ink, muted, border, accent, onaccent, soft = (
-        ("#151a24", "#1d2431", "#eef3fc", "#adb9cf", "#343f53", "#a8c8ff", "#10264e", "#26354f")
+        ("#151a24", "#1d2431", "#f1f5fc", "#c0ccdf", "#343f53", "#a8c8ff", "#10264e", "#26354f")
         if dark else
-        ("#f6f8fc", "#ffffff", "#24314a", "#58677f", "#c7d2e3", "#2457d6", "#ffffff", "#edf2ff"))
+        ("#f6f8fc", "#ffffff", "#17243b", "#475569", "#c7d2e3", "#2457d6", "#ffffff", "#edf2ff"))
     divider = "#536179" if dark else "#8798b0"
     palette = window.palette()
     check = (Path(__file__).parent / "assets" / ("check-dark.svg" if dark else "check-light.svg")).as_posix()
@@ -197,7 +197,7 @@ def apply_theme(window, scheme=None):
         palette.setColor(role, QColor(color))
     window.setPalette(palette)
     window.setStyleSheet(f"""
-        QWidget {{ color: {ink}; font-size: 14px; }}
+        QWidget {{ color: {ink}; font-size: 15px; }}
         QMainWindow, QDialog, QWidget#workspace {{ background: {bg}; }}
         QWidget#settingsContent, QScrollArea {{ background: {bg}; }}
         QFrame#folderCard, QFrame#operation {{ background: {surface}; border: 1px solid {border}; border-radius: 10px; }}
@@ -214,16 +214,18 @@ def apply_theme(window, scheme=None):
         QPushButton[primary="true"] {{ background: {accent}; color: {onaccent}; border-color: {accent}; font-weight: 600; }}
         QPushButton[primary="true"]:hover {{ border: 2px solid {ink}; padding: 8px 13px; }}
         QPushButton:disabled {{ color: {muted}; background: {bg}; border-color: {border}; }}
-        QPushButton[nav="true"] {{ background: transparent; border-color: transparent; padding: 10px 16px; }}
-        QPushButton[nav="true"]:checked {{ background: {soft}; color: {accent}; font-weight: 600; }}
-        QPushButton[nav="true"]:focus {{ border-color: {accent}; }}
+        QPushButton[nav="true"] {{ background: transparent; border: none; border-radius: 0;
+                                  border-bottom: 2px solid transparent; padding: 10px 16px; font-weight: 600; }}
+        QPushButton[nav="true"]:hover {{ background: {soft}; }}
+        QPushButton[nav="true"]:checked {{ color: {accent}; border-bottom-color: {accent}; }}
+        QPushButton[nav="true"]:focus {{ border: none; border-bottom: 2px dashed {accent}; padding: 10px 16px; }}
         QTableWidget {{ background: {surface}; alternate-background-color: {bg};
                         border: 1px solid {border}; border-radius: 6px;
                         gridline-color: {divider};
                         selection-background-color: {soft}; selection-color: {ink}; }}
         QTableWidget::item {{ padding: 8px; }}
         QTableWidget::item:focus {{ border: 1px solid {accent}; }}
-        QHeaderView::section {{ background: {bg}; color: {muted}; border: none;
+        QHeaderView::section {{ background: {bg}; color: {ink}; border: none;
                                 border-right: 1px solid {divider}; border-bottom: 1px solid {divider};
                                 padding: 12px; font-weight: 600; }}
         QTableCornerButton::section {{ background: {bg}; border: none;
@@ -262,6 +264,7 @@ def apply_theme(window, scheme=None):
 
 def build_ui(window):
     QApplication.setStyle("Fusion")
+    window.setFont(QFontDatabase.systemFont(QFontDatabase.GeneralFont))
     window.resize(1180, 760)
     window.setMinimumSize(900, 620)
     window.setWindowIcon(QIcon(str(Path(__file__).parent / "assets/icon.png")))
@@ -287,17 +290,21 @@ def build_ui(window):
     window.pages = QStackedWidget()
     window.page_opacity = QGraphicsOpacityEffect(window.pages)
     window.page_opacity.setOpacity(1.0)
+    window.page_opacity.setEnabled(False)
     window.pages.setGraphicsEffect(window.page_opacity)
     window.page_animation = QPropertyAnimation(window.page_opacity, b"opacity", window)
     window.page_animation.setDuration(160)
     window.page_animation.setStartValue(.65)
     window.page_animation.setEndValue(1.0)
     window.page_animation.setEasingCurve(QEasingCurve.OutCubic)
+    window.page_animation.finished.connect(lambda: window.page_opacity.setEnabled(False))
 
     def animate_page(_):
         window.page_animation.stop()
         window.page_opacity.setOpacity(1.0)
+        window.page_opacity.setEnabled(False)
         if window.isVisible() and QApplication.isEffectEnabled(Qt.UI_AnimateMenu):
+            window.page_opacity.setEnabled(True)
             window.page_animation.start()
 
     window.pages.currentChanged.connect(animate_page)
@@ -418,7 +425,7 @@ def build_ui(window):
     window.rules.setColumnHidden(3, True)
     # Qt's row headers automatically follow insertions, removal and rule priority.
     window.rules.verticalHeader().show()
-    window.rules.verticalHeader().setFixedWidth(44)
+    window.rules.verticalHeader().setMinimumWidth(44)
     window.rules.verticalHeader().setAccessibleName("Rule serial number and priority")
     window.rules.verticalHeader().setDefaultSectionSize(60)
     for col, width in enumerate([60, 170, 230, 160, 280]):

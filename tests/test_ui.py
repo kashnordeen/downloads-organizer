@@ -165,10 +165,38 @@ class DesktopFlowTest(unittest.TestCase):
                     self.assertTrue(window.navigation.button(index).isEnabled())
                 self.wait_until(lambda: window.page_animation.state() == QAbstractAnimation.Stopped)
                 self.assertEqual(window.page_opacity.opacity(), 1.0)
+                self.assertFalse(window.page_opacity.isEnabled())
             with patch.object(QApplication, "isEffectEnabled", return_value=False):
                 window.show_page(3)
                 self.assertEqual(window.page_animation.state(), QAbstractAnimation.Stopped)
                 self.assertEqual(window.page_opacity.opacity(), 1.0)
+                self.assertFalse(window.page_opacity.isEnabled())
+            window.close()
+
+    def test_tab_focus_keeps_geometry_and_keyboard_navigation(self):
+        from PySide6.QtTest import QTest
+        with tempfile.TemporaryDirectory() as directory:
+            window = Window(Path(directory).resolve() / "data")
+            window.show()
+            window.activateWindow()
+            APP.processEvents()
+            for mode in (False, True, False):
+                window.night_mode.setChecked(mode)
+                tab = window.navigation.button(1)
+                window.show_page(0)
+                tab.clearFocus()
+                APP.processEvents()
+                normal_size = tab.sizeHint()
+                tab.setFocus(Qt.TabFocusReason)
+                APP.processEvents()
+                self.assertTrue(tab.hasFocus())
+                self.assertEqual(tab.sizeHint(), normal_size)
+                self.assertNotEqual(tab.grab().toImage().pixelColor(tab.width() // 2, 1).name(),
+                                    "#a8c8ff" if mode else "#2457d6")
+                QTest.keyClick(tab, Qt.Key_Space)
+                APP.processEvents()
+                self.assertEqual(window.pages.currentIndex(), 1)
+                self.assertEqual(tab.sizeHint(), normal_size)
             window.close()
 
     def test_tray_close_show_and_quit(self):
@@ -207,7 +235,7 @@ class DesktopFlowTest(unittest.TestCase):
                 dialog = RuleDialog(window, window.read_rules()[0])
                 dialog.contains.ensurePolished()
                 self.assertEqual(dialog.contains.palette().color(QPalette.PlaceholderText).name(),
-                                 "#adb9cf" if mode else "#58677f")
+                                 "#c0ccdf" if mode else "#475569")
                 dialog.close()
             self.assertTrue(window.pages.widget(3).isAncestorOf(window.night_mode))
             window.close()
