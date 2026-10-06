@@ -162,7 +162,8 @@ def table(headers, editable=False):
     control.setAccessibleName("Organization rules" if editable else headers[0] + " list")
     control.setWordWrap(False)
     control.setAlternatingRowColors(True)
-    control.setShowGrid(False)
+    control.setShowGrid(True)
+    control.setGridStyle(Qt.SolidLine)
     control.verticalHeader().hide()
     control.verticalHeader().setDefaultSectionSize(44)
     control.setSelectionBehavior(QTableWidget.SelectRows)
@@ -170,12 +171,15 @@ def table(headers, editable=False):
     if not editable:
         control.setEditTriggers(QTableWidget.NoEditTriggers)
     control.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+    control.horizontalHeader().setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
     control.horizontalHeader().setStretchLastSection(True)
     return control
 
 
 def apply_theme(window, scheme=None):
-    dark = (scheme or QApplication.styleHints().colorScheme()) == Qt.ColorScheme.Dark
+    if scheme is not None:
+        window.theme_controls.button(int(scheme == Qt.ColorScheme.Dark)).setChecked(True)
+    dark = window.theme_controls.checkedId() == 1
     bg, surface, ink, muted, border, accent, onaccent, soft = (
         ("#151a24", "#1d2431", "#eef3fc", "#adb9cf", "#343f53", "#a8c8ff", "#10264e", "#26354f")
         if dark else
@@ -213,11 +217,15 @@ def apply_theme(window, scheme=None):
         QPushButton[nav="true"]:focus {{ border-color: {accent}; }}
         QTableWidget {{ background: {surface}; alternate-background-color: {bg};
                         border: 1px solid {border}; border-radius: 6px;
+                        gridline-color: {border};
                         selection-background-color: {soft}; selection-color: {ink}; }}
-        QTableWidget::item {{ padding: 8px; border-bottom: 1px solid {border}; }}
+        QTableWidget::item {{ padding: 8px; }}
         QTableWidget::item:focus {{ border: 1px solid {accent}; }}
         QHeaderView::section {{ background: {bg}; color: {muted}; border: none;
-                                border-bottom: 1px solid {border}; padding: 12px 8px; font-weight: 600; }}
+                                border-right: 1px solid {border}; border-bottom: 1px solid {border};
+                                padding: 12px; font-weight: 600; }}
+        QTableCornerButton::section {{ background: {bg}; border: none;
+                                     border-right: 1px solid {border}; border-bottom: 1px solid {border}; }}
         QLineEdit {{ background: {surface}; color: {ink}; border: 2px solid {accent}; padding: 4px; }}
         QCheckBox {{ spacing: 10px; padding: 7px 0; border: 1px solid transparent; border-radius: 4px; }}
         QCheckBox:focus {{ border-color: {accent}; }}
@@ -307,6 +315,16 @@ def build_ui(window):
     caption.setProperty("muted", True)
     top.addWidget(caption)
     top.addStretch()
+    window.theme_controls = QButtonGroup(window)
+    for index, name in enumerate(["Day", "Night"]):
+        theme = QPushButton(name)
+        theme.setProperty("nav", True)
+        theme.setCheckable(True)
+        theme.setAccessibleName(name + " mode")
+        theme.setToolTip("Use " + name.lower() + " mode")
+        window.theme_controls.addButton(theme, index)
+        top.addWidget(theme)
+    window.theme_controls.button(int(QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark)).setChecked(True)
     window.mode_label = QLabel("Manual mode")
     window.mode_label.setObjectName("mode")
     top.addWidget(window.mode_label)
@@ -429,7 +447,7 @@ def build_ui(window):
 
     history = window.pages.widget(2).layout()
     window.history_table = table(["ID", "Original file", "Destination", "State", "Details"])
-    for col, width in enumerate([56, 270, 270, 100, 180]):
+    for col, width in enumerate([56, 250, 250, 100, 250]):
         window.history_table.setColumnWidth(col, width)
     history.addWidget(window.history_table, 1)
     window.history_empty = QLabel("No moves yet\n\nCompleted moves appear here so you can review or undo them.")
@@ -517,4 +535,3 @@ def build_ui(window):
     window.navigation.idClicked.connect(window.show_page)
     window.show_page(0)
     apply_theme(window)
-    QApplication.styleHints().colorSchemeChanged.connect(lambda scheme: apply_theme(window, scheme))

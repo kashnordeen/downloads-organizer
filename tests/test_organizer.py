@@ -1,4 +1,6 @@
 import json
+import sqlite3
+from contextlib import closing
 import tempfile
 import os
 import time
@@ -72,12 +74,30 @@ class OrganizerTests(unittest.TestCase):
         proposal.destination.parent.mkdir()
         proposal.destination.write_bytes(b"existing")
         with Journal(self.root / "history.db") as journal:
+            started = time.time()
             actual = journal.move(proposal)
             self.assertEqual(actual.name, "sample (1).pdf")
             self.assertEqual(actual.read_bytes(), b"important data")
             self.assertEqual(proposal.destination.read_bytes(), b"existing")
             self.assertFalse(proposal.source.exists())
             self.assertEqual(journal.history()[0][3], "complete")
+            self.assertGreaterEqual(journal.history()[0][5], started)
+            self.assertLessEqual(journal.history()[0][5], time.time())
+
+    def test_history_timestamp_upgrade_preserves_older_rows(self):
+        path = self.root / "history.db"
+        with closing(sqlite3.connect(path)) as database:
+            database.execute("CREATE TABLE operations (id INTEGER PRIMARY KEY, source TEXT, destination TEXT, state TEXT, hash TEXT, signature TEXT, temp TEXT, undo_of INTEGER, error TEXT)")
+            database.execute("INSERT INTO operations (source,destination,state,error) VALUES ('original','destination','cancelled','Old details')")
+            database.commit()
+        for _ in range(2):
+            with Journal(path) as journal:
+                self.assertEqual(journal.history(), [(1, "original", "destination", "cancelled", "Old details", None)])
+        proposal = self.ready_proposal()
+        with Journal(path) as journal:
+            journal.move(proposal)
+            self.assertIsInstance(journal.history()[0][5], float)
+            self.assertIsNone(journal.history()[1][5])
 
     def test_changed_or_new_download_is_not_moved(self):
         proposal = self.ready_proposal()

@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QStandardPaths, Qt, QThread, Signal, QLockFile, QTimer, QFileSystemWatcher, QUrl
@@ -10,7 +11,7 @@ from .core import Rule, defaults, load_settings, load_options, preview, save_set
 from .moves import Journal, OperationCancelled
 from .worker import MonitorWorker
 from .startup import set_startup, startup_enabled
-from .ui import build_ui, RuleDialog, initial_folder, guided_tour
+from .ui import build_ui, apply_theme, RuleDialog, initial_folder, guided_tour
 from .updates import UpdateWorker
 
 
@@ -91,6 +92,9 @@ class Window(QMainWindow):
                 self.automatic.setChecked(options.get("automatic", False))
                 self.tray_mode.setChecked(options.get("tray", False))
                 self.update_notifications.setChecked(options.get("update_notifications", False))
+                if "night_mode" in options:
+                    self.theme_controls.button(int(options["night_mode"])).setChecked(True)
+                    apply_theme(self)
             except ValueError as error:
                 self.status.setText(str(error) + " Original settings were preserved.")
         self.rules.itemChanged.connect(self.invalidate)
@@ -99,6 +103,7 @@ class Window(QMainWindow):
         self.automatic.toggled.connect(self.update_ui)
         self.tray_mode.toggled.connect(self.save)
         self.update_notifications.toggled.connect(self.toggle_updates)
+        self.theme_controls.idClicked.connect(self.set_theme)
         try:
             self.login_start.setChecked(startup_enabled())
         except (OSError, ImportError, RuntimeError) as error:
@@ -110,6 +115,11 @@ class Window(QMainWindow):
             QTimer.singleShot(0, lambda: self.toggle_automatic(True))
         if self.update_notifications.isChecked():
             QTimer.singleShot(0, self.check_updates)
+
+    def set_theme(self, _):
+        apply_theme(self)
+        if self.folder is not None:
+            self.save()
 
     def toggle_updates(self, enabled):
         self.save()
@@ -260,7 +270,8 @@ class Window(QMainWindow):
 
     def options(self):
         return {"automatic": self.automatic.isChecked(), "tray": self.tray_mode.isChecked(),
-                "tour_done": self.tour_done, "update_notifications": self.update_notifications.isChecked()}
+                "tour_done": self.tour_done, "update_notifications": self.update_notifications.isChecked(),
+                "night_mode": self.theme_controls.checkedId() == 1}
 
     def load_history(self, recover=False):
         deferred = False
@@ -271,9 +282,15 @@ class Window(QMainWindow):
                 history = journal.history()
             self.history_table.setRowCount(len(history))
             for row, operation in enumerate(history):
-                for col, value in enumerate(operation):
+                recorded = (datetime.fromtimestamp(operation[5]).astimezone()
+                            if operation[5] is not None else None)
+                time_text = recorded.strftime("%d %b %Y · %H:%M:%S") if recorded else "Time unavailable (older entry)"
+                details = time_text + (" | " + operation[4] if operation[4] else "")
+                for col, value in enumerate((*operation[:4], details)):
                     item = QTableWidgetItem(str(value or ""))
                     item.setToolTip(str(value or ""))
+                    if col == 4 and recorded:
+                        item.setToolTip(f"Recorded (local time): {recorded.strftime('%d %b %Y %H:%M:%S %z')}\n{operation[4] or ''}")
                     self.history_table.setItem(row, col, item)
             if recover and any(row[3] == "review" for row in history):
                 self.status.setText("Some moves need review. Select one in History to move or leave in Downloads.")

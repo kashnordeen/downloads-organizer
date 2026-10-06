@@ -51,7 +51,9 @@ class Journal:
         self.db.execute("PRAGMA synchronous=FULL")
         self.db.execute("""CREATE TABLE IF NOT EXISTS operations (
             id INTEGER PRIMARY KEY, source TEXT, destination TEXT, state TEXT,
-            hash TEXT, signature TEXT, temp TEXT, undo_of INTEGER, error TEXT)""")
+            hash TEXT, signature TEXT, temp TEXT, undo_of INTEGER, error TEXT, recorded_at REAL)""")
+        if "recorded_at" not in {row[1] for row in self.db.execute("PRAGMA table_info(operations)")}:
+            self.db.execute("ALTER TABLE operations ADD COLUMN recorded_at REAL")
         self.db.commit()
 
     def __enter__(self):
@@ -83,7 +85,7 @@ class Journal:
         self.check_cancel()
 
     def history(self):
-        return self.db.execute("SELECT id,source,destination,state,error FROM operations ORDER BY id DESC").fetchall()
+        return self.db.execute("SELECT id,source,destination,state,error,recorded_at FROM operations ORDER BY id DESC").fetchall()
 
     def unresolved_sources(self):
         return {row[0] for row in self.db.execute(
@@ -110,9 +112,9 @@ class Journal:
         if signature(source) != proposal.signature:
             raise ValueError("File changed while reading")
         cursor = self.db.execute("""INSERT INTO operations
-            (source,destination,state,hash,signature,undo_of,error)
-            VALUES (?,?,'pending',?,?,?, '')""", (str(source), str(destination), expected,
-                json.dumps(proposal.signature), undo_of))
+            (source,destination,state,hash,signature,undo_of,error,recorded_at)
+            VALUES (?,?,'pending',?,?,?, '',?)""", (str(source), str(destination), expected,
+                json.dumps(proposal.signature), undo_of, time.time()))
         operation = cursor.lastrowid
         self.db.commit()
         temp = None

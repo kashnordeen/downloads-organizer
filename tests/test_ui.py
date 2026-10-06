@@ -189,6 +189,39 @@ class DesktopFlowTest(unittest.TestCase):
                 self.assertTrue(window.quitting)
                 self.assertFalse(window.tray.isVisible())
 
+    def test_day_night_choice_persists_and_history_displays_local_time(self):
+        from datetime import datetime
+        from PySide6.QtGui import QPalette
+        from organizer.moves import Journal
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            window = Window(root / "data")
+            window.set_folder(root)
+            window.refresh()
+            proposals = list(window.proposals)
+            for mode, color in [(1, "#151a24"), (0, "#f6f8fc"), (1, "#151a24")]:
+                window.theme_controls.button(mode).click()
+                self.assertEqual(window.palette().color(QPalette.Window).name(), color)
+                self.assertEqual(window.proposals, proposals)
+            window.close()
+            restarted = Window(root / "data")
+            self.assertEqual(restarted.theme_controls.checkedId(), 1)
+            self.assertEqual(restarted.palette().color(QPalette.Window).name(), "#151a24")
+            recorded = 1791283200
+            with Journal(root / "data" / "history.db") as journal:
+                journal.db.execute("INSERT INTO operations (source,destination,state,error,recorded_at) VALUES (?,?, 'cancelled',?,?)",
+                                   (str(root / "sample.pdf"), str(root / "PDFs/sample.pdf"), "Cancelled safely", recorded))
+                journal.db.commit()
+            restarted.load_history()
+            details = restarted.history_table.item(0, 4)
+            self.assertIn(datetime.fromtimestamp(recorded).strftime("%d %b %Y · %H:%M:%S"), details.text())
+            self.assertIn("Cancelled safely", details.text())
+            self.assertIn("local time", details.toolTip())
+            for table in (restarted.files, restarted.rules, restarted.history_table):
+                self.assertTrue(table.showGrid())
+                self.assertEqual(table.horizontalHeader().defaultAlignment(), Qt.AlignLeft | Qt.AlignVCenter)
+            restarted.close()
+
     def test_no_tray_fallback_and_single_instance_lock(self):
         from PySide6.QtCore import QLockFile
         with tempfile.TemporaryDirectory() as directory:
